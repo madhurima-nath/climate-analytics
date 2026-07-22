@@ -1,0 +1,21 @@
+# Data (all data lives in Databricks, not the repo)
+*.csv
+*.parquet
+data/
+
+# Python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# Streamlit secrets (Databricks connection credentials)
+.streamlit/secrets.toml
+
+# Environment/credentials
+.env
+
+# Databricks local sync config (if using CLI or VS Code extension)
+.databricks/
+
+# OS
+.DS_Store

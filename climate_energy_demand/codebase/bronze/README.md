@@ -51,7 +51,7 @@ Notebook **04 (NOAA)** utilizes the **Haversine Formula** to find the nearest ph
 *   This is essential for accurate station selection in high-latitude regions (e.g., the Nordics) where longitudinal convergence distorts standard map-based distance calculations.
 
 ### D. FAO Relational Ingestion
-FAOSTAT data is ingested in its raw "E_All_Data" format. We ingest 5 files per domain (Data, AreaCodes, ItemCodes, Elements, Flags).
+FAOSTAT data is ingested in its raw "_All_Data" format. We ingest 5 files per domain (Data, AreaCodes, ItemCodes, Elements, Flags).
 *   **Choice of `All_Data`:** We prioritize the "Long" format over the "NOFLAG" version to ensure that data quality markers (e.g., "Official Data" vs. "Estimate") are available for downstream Silver-layer validation.
 
 ## 5. Maintenance & Refresh
@@ -67,4 +67,4 @@ To support EU-level climate energy demand modeling, the CMIP6 ingestion logic fo
 - Vectorized Tidy Transformation: Uses Pandas melt and pivot within the ingestion loop to reshape wide API responses into a "Tidy Data" format (Model-as-a-column), facilitating direct SQL-based ensemble analysis.
 
 ---
-*Note: This layer provides the high-fidelity raw foundation required for the subsequent Trusted (Silver) layer transformations.*
+*Note: This layer provides the high-fidelity raw foundation required for the subsequent Silver layer transformations.*

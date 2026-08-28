@@ -26,6 +26,7 @@ Quantify the relationship between daily climatic stress and national energy cons
 2.  **Demand Sensitivity Index (DSI):** A calculated intensity metric:
     `DSI = (hdd + cdd) / (annual_electricity_consumption / 365)`
     *Logic: Normalizes thermal demand (Heating/Cooling Degree Days) against the average daily baseline of the national grid.*
+3. **Climatological Normalization:** To account for geographic diversity, "Extreme Heat" is defined relatively. We calculate the temp_anomaly by comparing the daily mean against a 10-year monthly baseline for each iso_code. This ensures that energy demand spikes are analyzed in the context of local adaptation (e.g., a 25°C day in a typically 15°C region is flagged as a high-stress event). Heat stress is calculated using local monthly baselines to account for geographic adaptation, following EU/WMO standards for relative anomalies.
 
 ### 4. Key Business Metrics
 *   **Grid Volatility:** Variance of the DSI identifying countries with unhedged climate risk.

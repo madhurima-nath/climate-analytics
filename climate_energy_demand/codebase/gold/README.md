@@ -40,7 +40,7 @@ The `orchestrator.py` dynamically maps Gold tables to their specific transformat
 ## 3. Engineering Foundations & Observability
 
 ### A. Semantic AI-Readiness
-Every YAML configuration includes a `comments` attribute for all columns. The Orchestrator automatically pushes these descriptions to Unity Catalog, enabling the **AI/BI Genie** to interpret natural language queries (e.g., *"Which countries have high heating sensitivity?"*) without additional manual documentation.
+Every YAML configuration includes a `comments` attribute for all columns. The Orchestrator automatically pushes these descriptions to Unity Catalog, enabling the **AI/BI Genie** to interpret natural language queries (e.g., *"Which countries have high heating sensitivity?"*) without additional manual documentation. Thermal stress is measured as a climatological anomaly (departure from local normal) rather than a fixed global temperature.
 
 ### B. Spatial Alignment (H3)
 Gold tables utilize **Uber H3 Resolution 6** as the universal join key. This ensures that daily weather metrics and annual carbon flux data are perfectly aligned on a high-performance hexagonal grid, bypassing computationally expensive "Point-in-Polygon" operations.
@@ -75,5 +75,8 @@ The Gold layer is executed via the `orchestrator.py`. It can be run as a full su
 
 ---
 *Note: This layer provides the final semantic foundation for the Databricks AI/BI Dashboards and is designed for always-on accessibility in the Databricks Free Edition.*
+
+- EU: European Union
+- WMO: World Meteorological Organization
 
 ---

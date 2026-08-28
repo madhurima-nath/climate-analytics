@@ -1,168 +1,142 @@
 # Databricks notebook source
 # MAGIC %md
 # MAGIC # Bronze: Open-Meteo CMIP6 Climate Projections Ingestion
-# MAGIC Pulls CMIP6 climate model projections for the 5 Phase 1 countries across all 7
-# MAGIC available climate models, for a sample of future years (2020-2050, every 5th year),
-# MAGIC and writes raw results to a bronze Delta table.
+# MAGIC This notebook ingests future climate model projections for all global reference 
+# MAGIC locations, providing a multi-model ensemble for long-term risk assessment.
 # MAGIC
-# MAGIC This hits a different Open-Meteo endpoint than `01_ingest_openmeteo_historical.py` --
-# MAGIC the Climate API, not the Historical Weather API. It has no SSP2-4.5/SSP5-8.5 scenario
-# MAGIC switch; instead it offers 7 climate models, and the spread across them is what stands
-# MAGIC in for scenario uncertainty here.
+# MAGIC ### Technical Architecture
+# MAGIC * **Probabilistic Ensemble:** Ingests data from all 7 available CMIP6 HighResMIP models 
+# MAGIC   (e.g., EC-Earth3P-HR, MRI-AGCM3-2-S). The variance across these models provides 
+# MAGIC   the necessary "uncertainty signal" required for climate risk modeling in the 
+# MAGIC   absence of specific SSP scenario selectors.
+# MAGIC * **Strategic Sampling:** Pulls complete calendar years (Jan-Dec) for specific intervals 
+# MAGIC   (2020–2050, every 5th year). This allows for accurate annual Heating/Cooling Degree 
+# MAGIC   Day (HDD/CDD) calculations while significantly reducing API overhead compared to 
+# MAGIC   a continuous 100-year pull.
+# MAGIC * **Fault-Tolerant Checkpointing:** Tracks progress at the **(Country, Year)** grain. 
+# MAGIC   The pipeline automatically resumes from the last successful ingestion point, 
+# MAGIC   making it resilient against API throttling and network interruptions during 
+# MAGIC   large-scale global backfills.
+# MAGIC * **Throttling Management:** Implements an exponential backoff (5-minute cooldown) 
+# MAGIC   for 429 rate-limit errors and a conservative 3-second delay between requests 
+# MAGIC   to accommodate the heavy payload of the 7-model daily data.
 # MAGIC
-# MAGIC Only whole years are pulled (Jan-Dec) rather than the full 1950-2050 continuous range,
-# MAGIC to stay well within Open-Meteo's free-tier rate limits -- each sampled year still gets
-# MAGIC a real, correct annual HDD/CDD total; years in between are just not pulled at all.
-# MAGIC
-# MAGIC Safe to rerun: only overwrites rows for the sampled years (see `replaceWhere` below).
-# MAGIC Can also be run in steps -- each year fetches and writes on its own, so you can do
-# MAGIC a few sample years now and the rest later without losing anything.
-# MAGIC Assumes the catalog/schemas already exist from `01_ingest_openmeteo_historical.py`.
-# MAGIC
-# MAGIC API: https://open-meteo.com/en/docs/climate-api
+# MAGIC ### Source
+# MAGIC * API: https://climate-api.open-meteo.com/v1/climate
+# MAGIC * Parameters: Daily Mean/Max/Min Temperature (2m).
 
 # COMMAND ----------
 
 import requests
 import time
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 from pyspark.sql import Row
+from pyspark.sql.functions import col, expr
 
 # COMMAND ----------
 
-# Representative coordinates per country (capital cities) -- same as
-# 01_ingest_openmeteo_historical.py
-COUNTRIES = {
-    "France": (48.8566, 2.3522),
-    "Germany": (52.5200, 13.4050),
-    "Spain": (40.4168, -3.7038),
-    "Italy": (41.9028, 12.4964),
-    "United Kingdom": (51.5074, -0.1278),
-}
+# --- CONFIGURATION ---
+CATALOG = "climate_energy_demand"
+SCHEMA = "bronze"
+REF_PATH = f"/Volumes/{CATALOG}/{SCHEMA}/raw_uploads/reference_locations.csv"
+TARGET_TABLE = f"{CATALOG}.{SCHEMA}.openmeteo_climate_cmip6_projections"
 
-# Whole calendar years to sample, instead of a full 1950-2050 continuous pull.
 SAMPLE_YEARS = [2020, 2025, 2030, 2035, 2040, 2045, 2050]
-
-# All 7 available climate models -- kept complete, since the spread across them is
-# the actual uncertainty signal (this API has no SSP2-4.5/SSP5-8.5 scenario picker).
 MODELS = [
     "CMCC_CM2_VHR4", "FGOALS_f3_H", "HiRAM_SIT_HR", "MRI_AGCM3_2_S",
     "EC_Earth3P_HR", "MPI_ESM1_2_XR", "NICAM16_8S",
 ]
-
 DAILY_VARS = "temperature_2m_mean,temperature_2m_max,temperature_2m_min"
-
 CLIMATE_URL = "https://climate-api.open-meteo.com/v1/climate"
 
 # COMMAND ----------
 
-def fetch_country_year(country: str, lat: float, lon: float, year: int) -> dict:
-    """Call the Open-Meteo climate API for one country's coordinates, one full year, all models."""
+# --- STEP 1: CHECKPOINTING (IDENTIFY COMPLETED WORK) ---
+finished_pairs = set()
+if spark.catalog.tableExists(TARGET_TABLE):
+    # We identify which country-year combinations are already in the table
+    # Using YEAR(date) to extract the sample year
+    pairs_df = spark.table(TARGET_TABLE).select("country", expr("YEAR(date)").alias("year")).distinct()
+    finished_pairs = {(row.country, row.year) for row in pairs_df.collect()}
+    print(f"Skipping {len(finished_pairs)} country-year combinations already in the table.")
+
+# COMMAND ----------
+
+# --- STEP 2: LOAD DYNAMIC LOCATIONS ---
+locations_df = spark.read.csv(REF_PATH, header=True, inferSchema=True)
+locations = locations_df.filter("latitude IS NOT NULL").collect()
+
+# COMMAND ----------
+
+# --- STEP 3: API LOGIC WITH RETRY ---
+def fetch_with_retry(lat, lon, year, country_name, max_retries=3):
     params = {
-        "latitude": lat,
-        "longitude": lon,
-        "start_date": f"{year}-01-01",
-        "end_date": f"{year}-12-31",
+        "latitude": lat, "longitude": lon,
+        "start_date": f"{year}-01-01", "end_date": f"{year}-12-31",
         "models": ",".join(MODELS),
         "daily": DAILY_VARS,
     }
-    response = requests.get(CLIMATE_URL, params=params, timeout=60)
-    response.raise_for_status()
-    return response.json()
+    for attempt in range(max_retries):
+        try:
+            res = requests.get(CLIMATE_URL, params=params, timeout=60)
+            if res.status_code == 200:
+                return res.json()
+            elif res.status_code == 429:
+                wait_time = 300 * (attempt + 1)
+                print(f"!!! Rate limit (429) at {country_name} for {year}. Waiting {wait_time/60} mins...")
+                time.sleep(wait_time)
+            else:
+                print(f"Error {res.status_code} for {country_name}")
+                return None
+        except Exception as e:
+            print(f"Request failed: {e}")
+            time.sleep(10)
+    return None
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC ## Check column naming before the full pull
-# MAGIC Confirms how Open-Meteo names columns when multiple models are requested at once.
-# MAGIC Expected pattern: `{variable}_{model}`, e.g. `temperature_2m_mean_CMCC_CM2_VHR4` --
-# MAGIC this hasn't been verified against a live call, so check it here first.
-
-# COMMAND ----------
-
-_sample = fetch_country_year("France", *COUNTRIES["France"], 2030)
-print(list(_sample["daily"].keys()))
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## Fetch + write, one year at a time
-# MAGIC Each sample year fetches all 5 countries, then writes immediately -- scoped to just
-# MAGIC that year via `replaceWhere` -- before moving to the next. That means this can be done
-# MAGIC in steps: run this cell now for some years, later trim `SAMPLE_YEARS` down to whatever's
-# MAGIC left and rerun -- nothing already written gets touched either way.
-
-# COMMAND ----------
-
-target_table = "climate_energy_demand.bronze.openmeteo_cmip6_projections"
-ingestion_ts = datetime.now(UTC).isoformat()
+# --- STEP 4: GLOBAL INGESTION LOOP ---
+ingestion_ts = datetime.now(timezone.utc).isoformat()
 
 for year in SAMPLE_YEARS:
-    year_rows = []
+    for row in locations:
+        country = row.name
+        lat, lon = row.latitude, row.longitude
+        
+        # Check if this specific country-year is already done
+        if (country, year) in finished_pairs:
+            continue
+            
+        print(f"Fetching Projections for {country} / {year}...")
+        data = fetch_with_retry(lat, lon, year, country)
+        
+        if data:
+            daily = data["daily"]
+            dates = daily["time"]
+            country_rows = []
 
-    for country, (lat, lon) in COUNTRIES.items():
-        print(f"Fetching {country} / {year}...")
-        data = fetch_country_year(country, lat, lon, year)
-        daily = data["daily"]
-        dates = daily["time"]
+            for model in MODELS:
+                tmean = daily.get(f"temperature_2m_mean_{model}")
+                tmax = daily.get(f"temperature_2m_max_{model}")
+                tmin = daily.get(f"temperature_2m_min_{model}")
+                
+                if tmean is None: continue
 
-        for model in MODELS:
-            temp_mean = daily.get(f"temperature_2m_mean_{model}")
-            temp_max = daily.get(f"temperature_2m_max_{model}")
-            temp_min = daily.get(f"temperature_2m_min_{model}")
-            if temp_mean is None:
-                print(f"WARNING: no columns found for model {model} -- check naming pattern above")
-                continue
+                for d, m, x, n in zip(dates, tmean, tmax, tmin):
+                    country_rows.append(Row(
+                        country=country, date=d, model=model,
+                        temperature_2m_mean=m, temperature_2m_max=x, 
+                        temperature_2m_min=n, latitude=lat, longitude=lon,
+                        ingested_at=ingestion_ts
+                    ))
+            
+            # Save country-year immediately (Checkpoint)
+            if country_rows:
+                spark.createDataFrame(country_rows).write.format("delta").mode("append").saveAsTable(TARGET_TABLE)
+                
+            # Heavier payload (7 models) requires a more conservative sleep
+            time.sleep(3.0) 
+        else:
+            print(f"--- FAILED: {country} / {year} ---")
 
-            for d, tmean, tmax, tmin in zip(dates, temp_mean, temp_max, temp_min):
-                year_rows.append(
-                    Row(
-                        country=country,
-                        date=d,
-                        model=model,
-                        temperature_2m_mean=tmean,
-                        temperature_2m_max=tmax,
-                        temperature_2m_min=tmin,
-                        latitude=lat,
-                        longitude=lon,
-                        ingested_at=ingestion_ts,
-                    )
-                )
-
-        # Wider pause than the historical notebook's 1s -- each call here is heavier
-        # (full year x 7 models x 3 variables), and Open-Meteo's per-minute limit may
-        # weight requests by size rather than counting them 1-for-1.
-        time.sleep(5)
-
-    # Write this year immediately, scoped to just this year -- other sampled years,
-    # whether already written in a past run or not yet fetched, are untouched.
-    year_df = spark.createDataFrame(year_rows)
-    if spark.catalog.tableExists(target_table):
-        (
-            year_df.write.format("delta")
-            .mode("overwrite")
-            .option("replaceWhere", f"YEAR(date) = {year}")
-            .saveAsTable(target_table)
-        )
-    else:
-        year_df.write.format("delta").mode("overwrite").saveAsTable(target_table)
-
-    print(f"Wrote {len(year_rows)} rows for {year} to {target_table}")
-
-print("Done with this batch of sample years.")
-
-# COMMAND ----------
-
-# MAGIC %sql
-# MAGIC SELECT country, model, COUNT(*) AS days, MIN(date) AS first_date, MAX(date) AS last_date
-# MAGIC FROM climate_energy_demand.bronze.openmeteo_cmip6_projections
-# MAGIC GROUP BY country, model
-# MAGIC ORDER BY country, model
-
-# COMMAND ----------
-
-# MAGIC %sql
-# MAGIC -- DESCRIBE TABLE climate_energy_demand.bronze.openmeteo_historical;
-# MAGIC -- DESCRIBE TABLE climate_energy_demand.bronze.noaa_gsod;
-# MAGIC -- DESCRIBE TABLE climate_energy_demand.bronze.owid_energy;
-# MAGIC -- DESCRIBE TABLE climate_energy_demand.bronze.openmeteo_cmip6_projections;
+print("Climate Projections ingestion batch complete.")

@@ -16,6 +16,8 @@ Due to network egress restrictions in the Databricks Free Edition, several datas
 2.  Uploaded to `/Volumes/climate_energy_demand/bronze/raw_uploads/`.
 3.  Ingested into Delta tables via Spark to ensure they are governed by Unity Catalog.
 
+    - **Sequential Batch Persistence (Timeout Management)** To mitigate the 10-minute execution timeout enforced by the Databricks Free Edition, Notebook 05 (CMIP6) implements a **Sequential Transactional Commit** pattern. Data is persisted to Delta Lake immediately following the completion of every 50-location batch. This ensures that if the environment terminates, all prior progress is hard-written to disk and the pipeline can resume instantly without data loss.
+
 ## 3. Data Sources
 
 | Notebook | Dataset | Provider | Grain |
@@ -40,9 +42,8 @@ To handle the high volume of requests for 250+ locations, the Open-Meteo noteboo
 
 ### B. Fault-Tolerant Checkpointing
 Ingestion notebooks for weather and stations utilize an **Append-on-Success** pattern. 
-*   The pipeline identifies completed countries/years already present in the Delta table.
-*   It automatically filters the ingestion queue to skip completed work.
-*   This ensures that in the event of a network failure or daily API limit, the pipeline can be resumed immediately without data loss or redundant processing.
+* Granular Tracking: State is tracked at the (Country, Year) grain, identifies completed countries/years already present in the Delta table. The pipeline performs a pre-flight metadata scan of the Delta table to generate a work-queue of missing tasks. It automatically filters the ingestion queue to skip completed work.
+* Idempotency: This ensures that in the event of a network failure or daily API limit, the pipeline can be resumed immediately without data loss or redundant processing.
 
 ### C. Geospatial Precision (Haversine)
 Notebook **04 (NOAA)** utilizes the **Haversine Formula** to find the nearest physical weather station to each country's centroid. 
@@ -57,6 +58,13 @@ FAOSTAT data is ingested in its raw "E_All_Data" format. We ingest 5 files per d
 *   **Weather:** Notebook 02 is designed for daily execution.
 *   **Energy/Forestry:** Update the source CSVs in the Volume annually and rerun the respective ingestion notebooks.
 *   **Stations:** NOAA GSOD is a static backfill (Source cutoff: Aug 2025).
+
+* **Probabilistic Ensemble & Strategic Sampling** (Notebook 05)
+To support EU-level climate energy demand modeling, the CMIP6 ingestion logic follows a specific scientific methodology:
+
+- Uncertainty Signaling: The pipeline ingests all 7 available CMIP6 HighResMIP models (e.g., EC-Earth3P-HR, MRI-AGCM3-2-S). The variance across this ensemble provides the necessary uncertainty signal required for risk modeling in the absence of SSP scenario selectors.
+- Strategic Temporal Sampling: Rather than a continuous 100-year pull, we ingest complete calendar years in 5-year intervals (2020–2050). This provides sufficient longitudinal resolution for annual Heating/Cooling Degree Day (HDD/CDD) calculations while reducing API overhead by 80%.
+- Vectorized Tidy Transformation: Uses Pandas melt and pivot within the ingestion loop to reshape wide API responses into a "Tidy Data" format (Model-as-a-column), facilitating direct SQL-based ensemble analysis.
 
 ---
 *Note: This layer provides the high-fidelity raw foundation required for the subsequent Trusted (Silver) layer transformations.*

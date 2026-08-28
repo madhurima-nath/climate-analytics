@@ -1,5 +1,4 @@
 # Data (all data lives in Databricks, not the repo)
-*.csv
 *.parquet
 data/
 

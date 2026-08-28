@@ -1,0 +1,9 @@
+target_table: "silver.weather_projections"
+description: "CMIP6 climate projections with degree day thresholds"
+sources:
+  raw_weather: "bronze.openmeteo_climate_cmip6_projections"
+module: "weather"
+function: "process_weather_projections"
+params:
+  hdd_base: 15
+  cdd_base: 25

@@ -1,0 +1,8 @@
+target_table: "silver.dim_h3_grid"
+description: "Master H3 spatial grid for land-type classification"
+sources:
+  peatlands: "bronze.gfw_peatlands"
+module: "geospatial"
+function: "create_dim_h3_grid"
+params:
+  h3_resolution: 6

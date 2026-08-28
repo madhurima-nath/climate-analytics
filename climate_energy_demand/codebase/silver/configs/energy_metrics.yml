@@ -1,0 +1,9 @@
+# silver/configs/energy_metrics.yml
+target_table: "silver.energy_metrics"
+description: "Cleaned annual energy demand and socio-economic indicators"
+
+sources:
+  owid_raw: "bronze.owid_energy"
+
+module: "energy"
+function: "process_energy_metrics"

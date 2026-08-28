@@ -1,0 +1,9 @@
+# silver/configs/weather_observations.yml
+target_table: "silver.weather_observations"
+description: "Metric-standardized NOAA ground-truth observations"
+
+sources:
+  noaa_raw: "bronze.noaa_gsod"
+
+module: "weather"
+function: "process_weather_observations"

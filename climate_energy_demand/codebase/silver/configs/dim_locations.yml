@@ -1,0 +1,12 @@
+# silver/configs/dim_locations.yml
+target_table: "silver.dim_locations"
+description: "Master country lookup table"
+
+# These match the keys in the Python 'sources' dictionary
+sources:
+  fao_areas: "bronze.fao_land_use_area_codes"
+  owid_energy: "bronze.owid_energy"
+
+# This tells the orchestrator where to find the code
+module: "common"
+function: "create_dim_locations"

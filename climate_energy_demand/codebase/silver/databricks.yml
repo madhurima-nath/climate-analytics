@@ -1,0 +1,20 @@
+bundle:
+  name: climate-energy-platform
+
+# This defines the Job in the Databricks UI
+resources:
+  jobs:
+    silver_pipeline_job:
+      name: "Silver Layer Transformation Pipeline"
+      tasks:
+        - task_key: run_orchestrator
+          job_cluster_key: default_cluster
+          spark_python_task:
+            python_file: "src/orchestrator.py"
+
+# Defines the compute used to run the job
+targets:
+  dev:
+    workspace:
+      host: https://adb-xxxx.azuredatabricks.net # Your workspace URL
+    artifacts_path: /Volumes/climate_energy_demand/bronze/artifacts

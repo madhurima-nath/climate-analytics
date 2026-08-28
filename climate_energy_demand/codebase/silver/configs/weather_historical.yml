@@ -1,0 +1,13 @@
+# silver/configs/weather_historical.yml
+target_table: "silver.weather_historical"
+description: "Daily temperatures with 15/25 degree day metrics"
+
+sources:
+  raw_weather: "bronze.openmeteo_weather"
+
+module: "weather"
+function: "process_weather_historical"
+
+params:
+  hdd_base: 15
+  cdd_base: 25

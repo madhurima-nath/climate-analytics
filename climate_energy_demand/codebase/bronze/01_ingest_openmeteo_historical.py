@@ -1,4 +1,8 @@
 # Databricks notebook source
+# /// script
+# [tool.databricks.environment]
+# environment_version = "5"
+# ///
 # MAGIC %md
 # MAGIC # Bronze: Open-Meteo — Historical Weather Backfill
 # MAGIC This notebook performs a global backfill of daily temperature data (2010–2025) 
@@ -34,11 +38,11 @@ from pyspark.sql.functions import col
 
 # COMMAND ----------
 
-# One-time setup: create catalog and schemas for this project
-spark.sql("CREATE CATALOG IF NOT EXISTS climate_energy_demand")
-spark.sql("CREATE SCHEMA IF NOT EXISTS climate_energy_demand.bronze")
-spark.sql("CREATE SCHEMA IF NOT EXISTS climate_energy_demand.silver")
-spark.sql("CREATE SCHEMA IF NOT EXISTS climate_energy_demand.gold")
+# # One-time setup: create catalog and schemas for this project
+# spark.sql("CREATE CATALOG IF NOT EXISTS climate_energy_demand")
+# spark.sql("CREATE SCHEMA IF NOT EXISTS climate_energy_demand.bronze")
+# spark.sql("CREATE SCHEMA IF NOT EXISTS climate_energy_demand.silver")
+# spark.sql("CREATE SCHEMA IF NOT EXISTS climate_energy_demand.gold")
 
 # COMMAND ----------
 
@@ -50,21 +54,28 @@ TARGET_TABLE = f"{CATALOG}.{SCHEMA}.openmeteo_weather"
 
 # COMMAND ----------
 
+# historical weather data from 2010 to 2026
 START_DATE = "2010-01-01"
-# DYNAMIC END DATE: 5 days ago to ensure Archive API has finalized data
-END_DATE = (datetime.now(timezone.utc) - timedelta(days=5)).strftime("%Y-%m-%d")
+END_DATE = "2026-07-31"
 
 DAILY_VARS = "temperature_2m_max,temperature_2m_min"
 ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
+
+print(f"Using start date: {START_DATE}")
+print(f"Using end date: {END_DATE}")
 
 # COMMAND ----------
 
 # --- STEP 1: IDENTIFY COMPLETED COUNTRIES ---
 finished_countries = []
+
 if spark.catalog.tableExists(TARGET_TABLE):
     # Get the list of countries we've already successfully backfilled
+    # We use distinct() so we don't have a massive list of duplicates
     finished_countries = [row.country for row in spark.table(TARGET_TABLE).select("country").distinct().collect()]
     print(f"Found {len(finished_countries)} countries already in the table. Skipping these.")
+else:
+    print(f"Target table {TARGET_TABLE} does not exist yet. Starting fresh.")
 
 # COMMAND ----------
 
@@ -127,10 +138,3 @@ for row in to_fetch:
         time.sleep(2.0)
 
 print("Batch process complete or paused due to rate limits.")
-
-# COMMAND ----------
-
-# MAGIC %sql
-# MAGIC SELECT country, MIN(date), MAX(date), COUNT(*) 
-# MAGIC FROM climate_energy_demand.bronze.openmeteo_weather 
-# MAGIC GROUP BY country

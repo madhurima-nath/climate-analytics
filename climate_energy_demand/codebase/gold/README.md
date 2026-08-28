@@ -46,10 +46,17 @@ Every YAML configuration includes a `comments` attribute for all columns. The Or
 Gold tables utilize **Uber H3 Resolution 6** as the universal join key. This ensures that daily weather metrics and annual carbon flux data are perfectly aligned on a high-performance hexagonal grid, bypassing computationally expensive "Point-in-Polygon" operations.
 
 ### C. Audit & Transactional Logging
-The `logger.py` utility records every transformation cycle into a centralized `gold_audit_log`. Each entry captures:
+The `logger.py` utility records every transformation cycle into a centralized `gold_audit_log`. This ensures the pipeline is fully observable. Each entry captures:
 *   **Pipeline Lineage:** Run IDs, table names, and timestamps.
 *   **Data Integrity:** Input vs. Output row counts to identify data loss.
 *   **Performance:** Latency per transformation module for compute optimization.
+
+Details:
+* `run_id`: Unique UUID for the execution batch.
+* `target_table`: The specific gold table being processed.
+* `row_counts`: Input (Silver) vs. Output (Gold) counts to monitor data drift/loss.
+* `execution_metrics`: Start time, end time, and duration in seconds.
+* `error_message`: Captured tracebacks in the event of a transformation failure.
 
 ## 4. Production Workflow (Execution)
 

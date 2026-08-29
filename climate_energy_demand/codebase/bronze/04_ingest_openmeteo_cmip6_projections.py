@@ -49,7 +49,7 @@ SAMPLE_YEARS = [2020, 2025, 2030, 2035, 2040, 2045, 2050]
 MODELS = ["CMCC_CM2_VHR4", "FGOALS_f3_H", "HiRAM_SIT_HR", "MRI_AGCM3_2_S", "EC_Earth3P_HR", "MPI_ESM1_2_XR", "NICAM16_8S"]
 DAILY_VARS = ["temperature_2m_mean", "temperature_2m_max", "temperature_2m_min"]
 
-BATCH_SIZE = 50             # Max locations per request
+BATCH_SIZE = 5         # Max locations per request
 
 # COMMAND ----------
 

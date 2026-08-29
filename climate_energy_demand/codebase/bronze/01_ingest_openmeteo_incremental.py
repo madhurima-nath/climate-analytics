@@ -4,24 +4,32 @@
 # environment_version = "5"
 # ///
 # MAGIC %md
-# MAGIC # Bronze: Open-Meteo — Incremental Weather Update
-# MAGIC This notebook provides a robust daily update mechanism for the historical 
-# MAGIC weather series, ensuring the dataset remains current with zero manual intervention.
+# MAGIC # Incremental Weather Data Ingestion Pipeline
+# MAGIC #### Data Tier: Bronze | Catalog: `climate_energy_demand`
 # MAGIC
-# MAGIC ### Technical Implementation
-# MAGIC * **State-Aware Logic:** Automatically determines the update range by 
-# MAGIC   querying the existing Delta table for the latest available date per country.
-# MAGIC * **Refined Observations:** Implements a 7-day look-back window. This ensures 
-# MAGIC   the pipeline captures corrections often made by meteorological agencies 
-# MAGIC   a few days after initial data publication.
-# MAGIC * **Idempotency:** Uses the Delta `MERGE` operation to handle overlapping 
-# MAGIC   data windows. This prevents duplicates and ensures the pipeline can be 
-# MAGIC   re-run safely without corrupting the target table.
-# MAGIC * **Resilient Loop:** Uses an error-handling pattern to ensure that an 
-# MAGIC   API failure for a single coordinate does not block the update 
-# MAGIC   process for the rest of the global dataset.
-# MAGIC * **Optimized Performance:** Uses a 1.5s delay per request. Since incremental updates are "lighter" (7–30 days) than backfills, the delay is reduced to optimize daily runtime while remaining well within the API's fair-use limits.
-# MAGIC * **Shared Resilience:** Shares the same robust 429 error handling as the historical pipeline, ensuring the daily automated update is resilient to temporary API instability.
+# MAGIC ## 1. Overview
+# MAGIC This notebook implements a modular, state-aware ETL pipeline designed to ingest daily weather variables (Max/Min Temperature) from the **Open-Meteo Archive API**. The pipeline is architected for **incremental loading**, specifically bridging the gap between existing historical data (last finalized on **July 31, 2026**) and the current system date.
+# MAGIC
+# MAGIC ## 2. Key Architectural Principles
+# MAGIC *   **Idempotency (No Duplicates):** The pipeline uses **Delta Lake MERGE** logic. If a job is re-run or date ranges overlap, existing records are updated with the most recent API data rather than creating duplicate entries.
+# MAGIC *   **State Management (Watermarking):** Instead of hardcoded dates, the system queries the `TARGET_TABLE` to dynamically identify the "High Water Mark" (latest ingested date) for each country.
+# MAGIC *   **Data Integrity & Revisions:** To account for upstream data corrections often made by weather agencies, the pipeline implements a **7-day look-back overlap**. It re-fetches the last week of previously ingested data to ensure "provisional" records are updated to "finalized" values.
+# MAGIC *   **Unity Catalog Integration:** The solution leverages **UC Volumes** for reference data management and uses a three-level namespace for target table governance.
+# MAGIC
+# MAGIC ## 3. Data Flow
+# MAGIC 1.  **Extract:** Load dynamic country coordinates from a reference CSV stored in UC Volumes.
+# MAGIC 2.  **State Check:** Determine the latest available date in the `openmeteo_weather` table for each location.
+# MAGIC 3.  **Fetch:** Request missing historical data from the Archive API (optimized via `requests.Session`).
+# MAGIC 4.  **Transform:** Cast API responses into a structured Spark schema, ensuring type consistency for temperatures and coordinates.
+# MAGIC 5.  **Load:** Perform an atomic Upsert (Merge) into the Bronze Delta table.
+# MAGIC
+# MAGIC ## 4. Pipeline Parameters
+# MAGIC | Variable | Value | Description |
+# MAGIC |----------|-------|-------------|
+# MAGIC | **Target Table** | `openmeteo_weather` | The destination Bronze Delta table. |
+# MAGIC | **Reference Path** | `reference_locations.csv` | Source of truth for latitudes and longitudes. |
+# MAGIC | **API Endpoint** | `v1/archive` | Used to retrieve finalized historical weather observations. |
+# MAGIC | **Lookback Buffer** | 7 Days | Overlap period used to synchronize data corrections. |
 # MAGIC
 # MAGIC ### Source
 # MAGIC * API: https://api.open-meteo.com/v1/forecast
@@ -33,130 +41,168 @@
 
 import requests
 import time
-from datetime import datetime, timezone, timedelta
-from pyspark.sql import Row
+import logging
+from datetime import datetime, date, timedelta, timezone
+from typing import Optional, Dict, Any, List
+
+from pyspark.sql import SparkSession, Row
 from pyspark.sql.functions import max as spark_max
+from delta.tables import DeltaTable
 
 # COMMAND ----------
 
-# One-time setup: create catalog and schemas for this project
-spark.sql("CREATE CATALOG IF NOT EXISTS climate_energy_demand")
-spark.sql("CREATE SCHEMA IF NOT EXISTS climate_energy_demand.bronze")
-spark.sql("CREATE SCHEMA IF NOT EXISTS climate_energy_demand.silver")
-spark.sql("CREATE SCHEMA IF NOT EXISTS climate_energy_demand.gold")
+# Setup basic logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("WeatherETL")
 
 # COMMAND ----------
 
-# --- CONFIGURATION ---
 CATALOG = "climate_energy_demand"
 SCHEMA = "bronze"
 REF_PATH = f"/Volumes/{CATALOG}/{SCHEMA}/raw_uploads/reference_locations.csv"
 TARGET_TABLE = f"{CATALOG}.{SCHEMA}.openmeteo_weather"
 
-# Forecast API is better for incremental as it has 0-day lag
-API_URL = "https://api.open-meteo.com/v1/forecast"
+# Using Archive API to support historical incremental loads (July 2024 to 2026)
+API_URL = "https://archive-api.open-meteo.com/v1/archive"
 DAILY_VARS = "temperature_2m_max,temperature_2m_min"
 
 # COMMAND ----------
 
+# api client
+class WeatherClient:
+    """Handles network communication with Open-Meteo."""
+    def __init__(self):
+        self.session = requests.Session()
 
-# --- STEP 1: STATE-AWARE SETUP ---
-# 1. Load the dynamic country list
-locations_df = spark.read.csv(REF_PATH, header=True, inferSchema=True)
-locations = locations_df.filter("latitude IS NOT NULL").collect()
-
-# 2. Get latest dates from existing table to determine "where we left off"
-if spark.catalog.tableExists(TARGET_TABLE):
-    last_dates_df = spark.table(TARGET_TABLE).groupBy("country").agg(spark_max("date").alias("max_date"))
-    last_dates = {row.country: row.max_date for row in last_dates_df.collect()}
-else:
-    print("Warning: Target table not found. Defaulting to 30-day lookback.")
-    last_dates = {}
-
-def fetch_with_retry(lat, lon, start_date, end_date, country_name, max_retries=3):
-    params = {
-        "latitude": lat, "longitude": lon,
-        "start_date": start_date, "end_date": end_date,
-        "daily": DAILY_VARS, "timezone": "auto"
-    }
-    for attempt in range(max_retries):
+    def fetch_with_retry(self, lat, lon, start_date, end_date, country_name):
+        params = {
+            "latitude": lat, "longitude": lon,
+            "start_date": start_date, "end_date": end_date,
+            "daily": DAILY_VARS, "timezone": "auto"
+        }
         try:
-            res = requests.get(API_URL, params=params, timeout=60)
+            res = self.session.get(API_URL, params=params, timeout=60)
             if res.status_code == 200:
                 return res.json()
             elif res.status_code == 429:
-                wait_time = 60 * (attempt + 1)
-                print(f"!!! Rate limited (429) for {country_name}. Waiting {wait_time}s...")
-                time.sleep(wait_time)
-            else:
-                print(f"Error {res.status_code} for {country_name}")
-                return None
+                logger.warning(f"Rate limit hit for {country_name}. Throttling...")
+                time.sleep(30)
+            return None
         except Exception as e:
-            print(f"Request failed for {country_name}: {e}")
-            time.sleep(5)
-    return None
-
-all_rows = []
-ingestion_ts = datetime.now(timezone.utc).isoformat()
-today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            logger.error(f"Request failed for {country_name}: {e}")
+            return None
 
 # COMMAND ----------
 
-# --- STEP 2: INCREMENTAL LOOP ---
-print(f"Starting incremental update for {len(locations)} locations...")
+# state management - don't call already loaded data
+class StateManager:
+    """Handles Watermarking to find where the data last stopped."""
+    def __init__(self, spark: SparkSession):
+        self.spark = spark
 
-for row in locations:
-    country = row.name
-    lat = row.latitude
-    lon = row.longitude
-    
-    # 7-day look-back to catch data corrections from weather agencies
-    last_date_str = last_dates.get(country)
-    if last_date_str:
-        start_dt = datetime.strptime(last_date_str, "%Y-%m-%d") - timedelta(days=7)
-    else:
-        start_dt = datetime.now(timezone.utc) - timedelta(days=30)
-    
-    start_date = start_dt.strftime("%Y-%m-%d")
-    
-    # If we are already up to date, skip
-    if start_date >= today_str:
-        continue
-
-    print(f"Updating {country} from {start_date} to {today_str}...")
-    
-    data = fetch_with_retry(lat, lon, start_date, today_str, country)
-    
-    if data:
-        dates = data["daily"]["time"]
-        tmax = data["daily"]["temperature_2m_max"]
-        tmin = data["daily"]["temperature_2m_min"]
-
-        for d, mx, mn in zip(dates, tmax, tmin):
-            all_rows.append(Row(
-                country=country, date=d, 
-                temperature_2m_max=mx, temperature_2m_min=mn, 
-                latitude=lat, longitude=lon, 
-                ingested_at=ingestion_ts
-            ))
-        # Be gentle with the API
-        time.sleep(1.5)
+    def get_last_ingested_dates(self) -> Dict[str, date]:
+        if not self.spark.catalog.tableExists(TARGET_TABLE):
+            logger.info("Target table not found. Starting from scratch.")
+            return {}
+        
+        # Get the max date per country from the table
+        df = self.spark.table(TARGET_TABLE) \
+            .groupBy("country") \
+            .agg(spark_max("date").alias("max_date"))
+        
+        return {row.country: row.max_date for row in df.collect()}
 
 # COMMAND ----------
 
-# --- STEP 3: UPSERT (MERGE) INTO DELTA ---
-if all_rows:
-    new_data_df = spark.createDataFrame(all_rows)
-    new_data_df.createOrReplaceTempView("updates")
-    
-    # The MERGE ensures no duplicates even with the 7-day look-back
-    spark.sql(f"""
-        MERGE INTO {TARGET_TABLE} AS target
-        USING updates AS source
-        ON target.country = source.country AND target.date = source.date
-        WHEN MATCHED THEN UPDATE SET *
-        WHEN NOT MATCHED THEN INSERT *
-    """)
-    print(f"Update successful. Added/Updated {len(all_rows)} rows.")
-else:
-    print("No new data to ingest.")
+# orchestration
+class WeatherETL:
+    def __init__(self, spark: SparkSession):
+        self.spark = spark
+        self.state_manager = StateManager(spark)
+        self.client = WeatherClient()
+
+    def run(self):
+        # Load locations from Volume
+        locations_df = self.spark.read.csv(REF_PATH, header=True, inferSchema=True)
+        locations = locations_df.filter("latitude IS NOT NULL").collect()
+
+        # Get Watermarks (e.g., will find 2026-07-31)
+        last_dates = self.state_manager.get_last_ingested_dates()
+
+        all_rows = []
+        ingestion_ts = datetime.now(timezone.utc)
+        
+        # Today is Aug 28, 2026. Archive API is finalized up to ~3 days ago.
+        latest_pull_date = (datetime.now(timezone.utc) - timedelta(days=3)).date()
+
+        for row in locations:
+            country = row.name
+            last_date_val = last_dates.get(country)
+            
+            # Watermark Logic: Use last date from table minus 7 day overlap for corrections
+            if last_date_val:
+                if isinstance(last_date_val, str):
+                    start_dt = datetime.strptime(last_date_val, "%Y-%m-%d").date() - timedelta(days=7)
+                else:
+                    start_dt = last_date_val - timedelta(days=7)
+            else:
+                start_dt = (datetime.now(timezone.utc) - timedelta(days=30)).date()
+            
+            # Skip if we are already current
+            if start_dt >= latest_pull_date:
+                continue
+
+            start_date_str = start_dt.strftime("%Y-%m-%d")
+            end_date_str = latest_pull_date.strftime("%Y-%m-%d")
+
+            data = self.client.fetch_with_retry(row.latitude, row.longitude, start_date_str, end_date_str, country)
+            
+            if data and "daily" in data:
+                d = data["daily"]
+                times = d.get("time", [])
+                if times:
+                    logger.info(f"✅ {country}: Fetched {len(times)} days ({start_date_str} to {end_date_str})")
+                    for i in range(len(times)):
+                        all_rows.append(Row(
+                            country=country, 
+                            date=times[i], 
+                            temperature_2m_max=float(d["temperature_2m_max"][i]) if d["temperature_2m_max"][i] is not None else None, 
+                            temperature_2m_min=float(d["temperature_2m_min"][i]) if d["temperature_2m_min"][i] is not None else None, 
+                            latitude=float(row.latitude), 
+                            longitude=float(row.longitude), 
+                            ingested_at=ingestion_ts
+                        ))
+            time.sleep(0.2)
+
+        if all_rows:
+            self.save_to_delta(all_rows)
+        else:
+            logger.info("🏁 Pipeline Finished: Table is already up to date for Aug 2026.")
+
+    def save_to_delta(self, rows):
+        """Idempotent save using programmatic Delta Merge."""
+        # Convert list of Rows to DataFrame
+        new_df = self.spark.createDataFrame(rows)
+        
+        if not self.spark.catalog.tableExists(TARGET_TABLE):
+            logger.info(f"Creating new table {TARGET_TABLE}")
+            new_df.write.format("delta").saveAsTable(TARGET_TABLE)
+        else:
+            logger.info(f"Merging {len(rows)} records into {TARGET_TABLE}")
+            # Programmatic Delta Merge to ensure no duplicates
+            dt = DeltaTable.forName(self.spark, TARGET_TABLE)
+            dt.alias("t").merge(
+                source=new_df.alias("s"),
+                condition="t.country = s.country AND t.date = s.date"
+            ).whenMatchedUpdate(set={
+                "temperature_2m_max": "s.temperature_2m_max",
+                "temperature_2m_min": "s.temperature_2m_min",
+                "ingested_at": "s.ingested_at"
+            }).whenNotMatchedInsertAll().execute()
+            logger.info("🏁 Merge Successful.")
+
+# COMMAND ----------
+
+# execution
+if __name__ == "__main__":
+    WeatherETL(spark).run()

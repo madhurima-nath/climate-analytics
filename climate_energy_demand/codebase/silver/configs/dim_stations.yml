@@ -1,6 +1,0 @@
-target_table: "silver.dim_stations"
-description: "Unique metadata for NOAA weather stations"
-sources:
-  noaa_raw: "bronze.noaa_gsod"
-module: "weather"
-function: "create_dim_stations"

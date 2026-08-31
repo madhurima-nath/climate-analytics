@@ -1,7 +1,0 @@
-target_table: "silver.forest_inventory_annual"
-description: "Consolidated FAO Land Use and Carbon stocks"
-sources:
-  fao_data: "bronze.fao_land_use_data_noflag"
-  fao_items: "bronze.fao_land_use_item_codes"
-module: "nature"
-function: "process_forest_inventory"

@@ -1,8 +1,0 @@
-target_table: "silver.carbon_flux_spatial"
-description: "Geospatial carbon flux (Sink vs Source) mapped to H3"
-sources:
-  flux_raw: "bronze.gfw_net_flux"
-module: "geospatial"
-function: "process_carbon_flux_spatial"
-params:
-  h3_resolution: 6

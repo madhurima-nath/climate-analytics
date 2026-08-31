@@ -14,8 +14,8 @@
 # MAGIC
 # MAGIC ### Operational Workflow
 # MAGIC 1.  **Checkpointing:** Scans Delta table for existing `(Country, Year)` pairs to generate a delta-workload.
-# MAGIC 2.  **Strategic Sampling:** Pulls 5-year intervals (2020-2050) to optimize HDD/CDD calculations.
-# MAGIC 3.  **Sequential Commits:** Saves to disk after **every batch** (50 locations). This is a safety feature to prevent data loss if the Databricks Free Tier 10-minute timeout is reached.
+# MAGIC 2.  **Strategic Sampling:** Pulls 5-year intervals (2020-2040) to optimize HDD/CDD calculations.
+# MAGIC 3.  **Sequential Commits:** Saves to disk after **every batch** (5 locations). This is a safety feature to prevent data loss if the Databricks Free Tier 10-minute timeout is reached.
 # MAGIC 4.  **Progress Tracking:** Monitors `[Batch / Total]` progress with completion percentages in real-time.
 # MAGIC
 # MAGIC ### Controls
@@ -45,7 +45,7 @@ TARGET_TABLE = f"{CATALOG}.{SCHEMA}.openmeteo_climate_cmip6_projections"
 REF_PATH = f"/Volumes/{CATALOG}/{SCHEMA}/raw_uploads/reference_locations.csv"
 
 CLIMATE_URL = "https://climate-api.open-meteo.com/v1/climate"
-SAMPLE_YEARS = [2020, 2025, 2030, 2035, 2040, 2045, 2050]
+SAMPLE_YEARS = [2020, 2025, 2030, 2035, 2040]
 MODELS = ["CMCC_CM2_VHR4", "FGOALS_f3_H", "HiRAM_SIT_HR", "MRI_AGCM3_2_S", "EC_Earth3P_HR", "MPI_ESM1_2_XR", "NICAM16_8S"]
 DAILY_VARS = ["temperature_2m_mean", "temperature_2m_max", "temperature_2m_min"]
 

@@ -1,0 +1,12 @@
+# Infrastructure
+databricks-cli              # For Bundle management (IaC)
+
+# Core Science & Engineering
+pyspark
+delta-spark
+numpy
+pandas
+
+# Placeholders
+# [Add climate libraries as required, e.g. xarray, geopandas]
+# [Add validation libraries, e.g. pydantic]

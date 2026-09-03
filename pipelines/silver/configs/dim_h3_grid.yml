@@ -1,0 +1,36 @@
+# =============================================================================
+# TARGET DEFINITION
+# =============================================================================
+target_table: "climate_energy_demand.silver.dim_h3_grid"
+description: "Master spatial classification grid. Maps H3 hexagons to primary land types (Peatland, Forest, Urban) for regional environmental analysis."
+
+# =============================================================================
+# SOURCE MAPPING
+# =============================================================================
+# Uses GFW Peatland data to classify the land-use characteristics of each cell.
+sources:
+  peatlands: "climate_energy_demand.bronze.gfw_peatlands"
+
+# =============================================================================
+# TRANSFORMATION LOGIC
+# =============================================================================
+# Found in: src/transforms/geospatial.py
+module: "geospatial"
+function: "create_dim_h3_grid"
+
+# =============================================================================
+# STATE & INTEGRITY
+# =============================================================================
+# Monitors for updates to the global peatland or land-type baseline.
+watermark_column: "ingested_at"
+
+# A unique record is defined by the H3 Cell ID and its classification.
+merge_keys:
+  - "h3_cell"
+  - "land_type"
+
+# =============================================================================
+# PARAMETERS
+# =============================================================================
+params:
+  h3_resolution: 6    # Ensures spatial parity with weather and carbon flux tables

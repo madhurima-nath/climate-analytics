@@ -1,0 +1,37 @@
+# =============================================================================
+# TARGET DEFINITION
+# =============================================================================
+target_table: "climate_energy_demand.silver.weather_observations"
+description: "Metric-standardised ground-truth weather observations (Celsius/Millimetres) from NOAA station networks."
+
+# =============================================================================
+# SOURCE MAPPING
+# =============================================================================
+# Source: NOAA Global Surface Summary of the Day (GSOD).
+sources:
+  noaa_raw: "climate_energy_demand.bronze.noaa_gsod"
+
+# =============================================================================
+# TRANSFORMATION LOGIC
+# =============================================================================
+# Found in: src/transforms/weather.py
+module: "weather"
+function: "process_weather_observations"
+
+# =============================================================================
+# STATE & INTEGRITY (For Manual Watermarking)
+# =============================================================================
+# Monitors the raw NOAA table for new daily observation batches.
+watermark_column: "ingested_at"
+
+# A unique observation is defined by the Station ID and the Date.
+# This prevents data duplication during incremental station updates.
+merge_keys:
+  - "station_id"
+  - "date"
+
+# =============================================================================
+# PARAMETERS
+# =============================================================================
+params:
+  unit_standard: "metric" # Ensures logic converts Fahrenheit to Celsius

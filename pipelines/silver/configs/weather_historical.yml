@@ -1,0 +1,42 @@
+# =============================================================================
+# TARGET DEFINITION
+# =============================================================================
+target_table: "climate_energy_demand.silver.weather_historical"
+description: "Daily temperature observations including standard metric conversions and energy stress indicators (HDD/CDD)."
+
+# =============================================================================
+# SOURCE MAPPING
+# =============================================================================
+# Key matches the dictionary key used in the Python transformation function.
+sources:
+  raw_weather: "climate_energy_demand.bronze.openmeteo_weather"
+
+# =============================================================================
+# TRANSFORMATION LOGIC
+# =============================================================================
+# Found in: src/transforms/weather.py
+module: "weather"
+function: "process_weather_historical"
+
+# =============================================================================
+# STATE & INTEGRITY (For Manual Watermarking)
+# =============================================================================
+# Used by the Orchestrator to find only data uploaded since the last run.
+watermark_column: "ingested_at"
+
+# Used for the 'Delta Merge' (Upsert). 
+# Ensures duplicate manual uploads do not create duplicate rows in Silver.
+merge_keys:
+  - "country"
+  - "date"
+  - "latitude"
+  - "longitude"
+
+# =============================================================================
+# PARAMETERS (Scientific Thresholds)
+# =============================================================================
+# These allow tuning of the logic without modifying Python code.
+params:
+  hdd_base: 15       # Heating Degree Day activation threshold (Celsius)
+  cdd_base: 25       # Cooling Degree Day activation threshold (Celsius)
+  h3_resolution: 6   # Spatial grid resolution (~30km hexagons)

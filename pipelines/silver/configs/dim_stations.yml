@@ -1,0 +1,35 @@
+# =============================================================================
+# TARGET DEFINITION
+# =============================================================================
+target_table: "climate_energy_demand.silver.dim_stations"
+description: "Master lookup for weather stations. Maps NOAA Station IDs to geographical coordinates, H3 hexagons (Res 6), and national boundaries."
+
+# =============================================================================
+# SOURCE MAPPING
+# =============================================================================
+# Metadata is extracted from the raw NOAA Global Surface Summary of the Day (GSOD).
+sources:
+  noaa_raw: "climate_energy_demand.bronze.noaa_gsod"
+
+# =============================================================================
+# TRANSFORMATION LOGIC
+# =============================================================================
+# Found in: src/transforms/weather.py
+module: "weather"
+function: "create_dim_stations"
+
+# =============================================================================
+# STATE & INTEGRITY (For Manual Watermarking)
+# =============================================================================
+# Monitors the raw NOAA table for any newly added stations or coordinate fixes.
+watermark_column: "ingested_at"
+
+# Each weather station is identified by its unique alphanumeric ID.
+merge_keys:
+  - "station_id"
+
+# =============================================================================
+# PARAMETERS
+# =============================================================================
+params:
+  h3_resolution: 6    # Assigns each station to a standardised grid cell

@@ -1,0 +1,41 @@
+# =============================================================================
+# TARGET DEFINITION
+# =============================================================================
+target_table: "climate_energy_demand.silver.weather_projections"
+description: "Future climate scenarios (CMIP6 Projections) including projected HDD/CDD metrics for energy demand forecasting."
+
+# =============================================================================
+# SOURCE MAPPING
+# =============================================================================
+# Projections are derived from the OpenMeteo Climate API (CMIP6).
+sources:
+  raw_weather: "climate_energy_demand.bronze.openmeteo_climate_cmip6_projections"
+
+# =============================================================================
+# TRANSFORMATION LOGIC
+# =============================================================================
+# Found in: src/transforms/weather.py
+module: "weather"
+function: "process_weather_projections"
+
+# =============================================================================
+# STATE & INTEGRITY (For Manual Watermarking)
+# =============================================================================
+watermark_column: "ingested_at"
+
+# Unique identifier includes the 'model' (e.g. EC-Earth3, MRI-ESM2-0).
+# This is critical as multiple climate models provide data for the same date/location.
+merge_keys:
+  - "model"
+  - "country"
+  - "date"
+  - "latitude"
+  - "longitude"
+
+# =============================================================================
+# PARAMETERS (Future Scenarios)
+# =============================================================================
+params:
+  hdd_base: 15
+  cdd_base: 25
+  h3_resolution: 6

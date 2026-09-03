@@ -1,0 +1,40 @@
+# =============================================================================
+# TARGET DEFINITION
+# =============================================================================
+target_table: "climate_energy_demand.silver.forest_inventory_annual"
+description: "Annual national forest cover and land-use metrics, standardised from FAO sources into a long-format relational structure."
+
+# =============================================================================
+# SOURCE MAPPING
+# =============================================================================
+# This transformation joins the metric data with the descriptive item codes.
+sources:
+  fao_data: "climate_energy_demand.bronze.fao_land_use_data_noflag"
+  fao_items: "climate_energy_demand.bronze.fao_land_use_item_codes"
+
+# =============================================================================
+# TRANSFORMATION LOGIC
+# =============================================================================
+# Found in: src/transforms/nature.py
+module: "nature"
+function: "process_forest_inventory"
+
+# =============================================================================
+# STATE & INTEGRITY (For Manual Watermarking)
+# =============================================================================
+# Monitors the 'fao_data' table for new manual uploads.
+watermark_column: "ingested_at"
+
+# Identifies a unique record by Country, Year, and Land-Use Item.
+# Prevents duplicate entries during incremental FAO data updates.
+merge_keys:
+  - "country_name"
+  - "year"
+  - "item"
+
+# =============================================================================
+# PARAMETERS
+# =============================================================================
+params:
+  start_year: 2010    # Aligning the nature baseline with the weather study period
+  unit_standard: "ha" # Standardising all area measurements to Hectares

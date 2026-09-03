@@ -1,0 +1,38 @@
+# =============================================================================
+# TARGET DEFINITION
+# =============================================================================
+target_table: "climate_energy_demand.silver.energy_metrics"
+description: "Annual electricity demand, generation, and socio-economic indicators (GDP, Population) at the national level."
+
+# =============================================================================
+# SOURCE MAPPING
+# =============================================================================
+# OWID Energy data provides the baseline for national energy profiles.
+sources:
+  owid_raw: "climate_energy_demand.bronze.owid_energy"
+
+# =============================================================================
+# TRANSFORMATION LOGIC
+# =============================================================================
+# Found in: src/transforms/energy.py
+module: "energy"
+function: "process_energy_metrics"
+
+# =============================================================================
+# STATE & INTEGRITY (For Manual Watermarking)
+# =============================================================================
+# Filters Bronze for data manually uploaded since the last successful run.
+watermark_column: "ingested_at"
+
+# Identifies a unique record by Country ISO Code and Year.
+# Ensures that if data is re-uploaded, records are updated rather than duplicated.
+merge_keys:
+  - "iso_code"
+  - "year"
+
+# =============================================================================
+# PARAMETERS
+# =============================================================================
+# Global filters to keep the Silver layer focused and performant.
+params:
+  start_year: 2010   # Only process data from 2010 onwards to align with weather data

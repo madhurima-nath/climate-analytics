@@ -1,0 +1,35 @@
+# =============================================================================
+# TARGET DEFINITION
+# =============================================================================
+target_table: "climate_energy_demand.silver.dim_date"
+description: "Master temporal dimension (2010-2040). Includes flags for weekends, EU seasonality, and standard calendar attributes."
+
+# =============================================================================
+# SOURCE MAPPING
+# =============================================================================
+# No source table required; data is generated programmatically.
+sources: {}
+
+# =============================================================================
+# TRANSFORMATION LOGIC
+# =============================================================================
+# Found in: src/transforms/common.py
+module: "common"
+function: "create_dim_date"
+
+# =============================================================================
+# STATE & INTEGRITY
+# =============================================================================
+# Static dimension; usually overwritten during setup or updated annually.
+watermark_column: null
+
+# The calendar date is the unique anchor.
+merge_keys:
+  - "date"
+
+# =============================================================================
+# PARAMETERS
+# =============================================================================
+params:
+  start_date: "2010-01-01"
+  end_date: "2040-12-31"

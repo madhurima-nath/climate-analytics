@@ -1,0 +1,37 @@
+# =============================================================================
+# TARGET DEFINITION
+# =============================================================================
+target_table: "climate_energy_demand.silver.carbon_flux_spatial"
+description: "Geospatial carbon flux (Sink vs Source) mapped to an H3 hexagonal grid for spatial correlation with climate data."
+
+# =============================================================================
+# SOURCE MAPPING
+# =============================================================================
+# Net flux data provides the CO2e (carbon dioxide equivalent) per hectare.
+sources:
+  flux_raw: "climate_energy_demand.bronze.gfw_net_flux"
+
+# =============================================================================
+# TRANSFORMATION LOGIC
+# =============================================================================
+# Found in: src/transforms/geospatial.py
+module: "geospatial"
+function: "process_carbon_flux_spatial"
+
+# =============================================================================
+# STATE & INTEGRITY (For Manual Watermarking)
+# =============================================================================
+# Tracks manual GFW data updates via the ingestion timestamp.
+watermark_column: "ingested_at"
+
+# Identifies a unique record by its H3 cell and the observation year.
+# This ensures a clean spatial time-series without overlapping data points.
+merge_keys:
+  - "h3_cell"
+  - "year"
+
+# =============================================================================
+# PARAMETERS
+# =============================================================================
+params:
+  h3_resolution: 6    # Standardised grid size (~30km hexagons) used across the project

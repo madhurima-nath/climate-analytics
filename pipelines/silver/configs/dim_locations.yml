@@ -1,0 +1,30 @@
+# =============================================================================
+# TARGET DEFINITION
+# =============================================================================
+target_table: "climate_energy_demand.silver.dim_locations"
+description: "Master country lookup table. Maps national names to ISO-3166 Alpha-3 codes and FAO area codes to ensure cross-domain join integrity."
+
+# =============================================================================
+# SOURCE MAPPING
+# =============================================================================
+# This dimension is built by cross-referencing FAO and OWID metadata.
+sources:
+  fao_areas: "climate_energy_demand.bronze.fao_land_use_area_codes"
+  owid_energy: "climate_energy_demand.bronze.owid_energy"
+
+# =============================================================================
+# TRANSFORMATION LOGIC
+# =============================================================================
+# Found in: src/transforms/common.py
+module: "common"
+function: "create_dim_locations"
+
+# =============================================================================
+# STATE & INTEGRITY
+# =============================================================================
+# Tracks updates to the source metadata tables.
+watermark_column: "ingested_at"
+
+# The ISO Alpha-3 code is the unique anchor for all national-level data.
+merge_keys:
+  - "iso_code"

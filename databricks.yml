@@ -1,0 +1,53 @@
+# =============================================================================
+# PROJECT BUNDLE CONFIGURATION
+# =============================================================================
+bundle:
+  name: climate_energy_demand
+
+# =============================================================================
+# INFRASTRUCTURE & WORKFLOW RESOURCES
+# =============================================================================
+resources:
+  jobs:
+    silver_standardisation_pipeline:
+      name: "Silver Layer: Master Orchestrator"
+      
+      # 2-hour timeout is the hard limit for the Free Edition
+      timeout_seconds: 7200 
+      
+      tasks:
+        # TASK 1: Infrastructure Check (Idempotent SQL)
+        # ---------------------------------------------------------------------
+        # This ensures schemas and the audit table exist before ingestion starts.
+        - task_key: initialise_silver_infrastructure
+          spark_sql_task:
+            sql_source_path: "pipelines/silver/setup_silver.sql"
+
+        # TASK 2: Execute Ingestion Engine
+        # ---------------------------------------------------------------------
+        # This runs the Python orchestrator which reads your 10 YAML files.
+        - task_key: run_silver_orchestrator
+          depends_on:
+            - task_key: initialise_silver_infrastructure
+          spark_python_task:
+            python_file: "pipelines/silver/silver_orchestrator.py"
+          
+          # Configuration for the Free Edition Single-Node Cluster
+          new_cluster:
+            spark_version: "15.4.x-scala2.12"
+            node_type_id: "Standard_DS3_v2" # Standard entry-level VM
+            num_workers: 0                  # 0 workers indicates Single-Node mode
+            spark_conf:
+              "spark.databricks.cluster.profile": "singleNode"
+              "spark.master": "local[*]"
+
+# =============================================================================
+# DEPLOYMENT TARGETS
+# =============================================================================
+targets:
+  # The 'dev' target is used for the Community Edition
+  dev:
+    mode: development
+    default: true
+    workspace:
+      host: https://community.cloud.databricks.com

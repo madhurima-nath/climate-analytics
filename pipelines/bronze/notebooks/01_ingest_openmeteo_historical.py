@@ -38,14 +38,6 @@ from pyspark.sql.functions import col
 
 # COMMAND ----------
 
-# # One-time setup: create catalog and schemas for this project
-# spark.sql("CREATE CATALOG IF NOT EXISTS climate_energy_demand")
-# spark.sql("CREATE SCHEMA IF NOT EXISTS climate_energy_demand.bronze")
-# spark.sql("CREATE SCHEMA IF NOT EXISTS climate_energy_demand.silver")
-# spark.sql("CREATE SCHEMA IF NOT EXISTS climate_energy_demand.gold")
-
-# COMMAND ----------
-
 # --- CONFIGURATION ---
 CATALOG = "climate_energy_demand"
 SCHEMA = "bronze"

@@ -15,6 +15,23 @@ To model the energy demand required for climate control, we implement a "Neutral
 *   **Logic:** Convert all coordinate-based weather data and polygon-based land use maps into a common hexagonal grid.
 *   **Impact:** This enables $O(1)$ join complexity. It allows the platform to join forestry carbon flux data with historical temperature drivers without expensive "Point-in-Polygon" spatial operations.
 
+### 2.1 Global Forest Watch Tile_ID System
+Global Forest Watch (GFW) organizes their global raster datasets using a **tile-based coordinate encoding**:
+
+*   **Format:** `{LAT}N/S_{LON}E/W` (e.g., `00N_000E`, `10N_050W`, `45S_120E`)
+*   **Tile Coverage:** Each tile represents a **10° × 10°** geographic area (~1,100 km × 1,100 km at the equator)
+*   **Purpose:** Efficiently manages massive global raster datasets by dividing Earth into manageable chunks
+
+**Parsing Logic:**
+```python
+# Extract coordinates from tile_id
+parts = tile_id.split("_")
+lat = float(parts[0][:-1]) * (1 if parts[0][-1] == "N" else -1)
+lon = float(parts[1][:-1]) * (1 if parts[1][-1] == "E" else -1)
+```
+
+**Implementation:** Since GFW metadata tables (peatlands, carbon flux) lack explicit latitude/longitude columns, we parse the tile_id to extract center coordinates for spatial binning and aggregation. This allows us to create spatial dimensions (`dim_h3_grid`) and perform geographic joins with weather data.
+
 ## 3. Data Persistence (Forward Fill)
 *   **Logic:** Missing temperature observations are forward-filled for a maximum of 3 consecutive days.
 *   **Reasoning:** Weather exhibits high persistence. Short-term sensor dropouts are best mitigated by carrying forward the last known value. Gaps exceeding 3 days remain as NULL to prevent the introduction of synthetic trends.

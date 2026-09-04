@@ -1,4 +1,8 @@
 # Databricks notebook source
+# /// script
+# [tool.databricks.environment]
+# environment_version = "5"
+# ///
 # DBTITLE 1,Silver Orchestrator
 import os
 import sys
@@ -15,38 +19,9 @@ if project_root not in sys.path:
 
 CONFIG_DIR = os.path.join(base_path, 'configs')
 
-print(f"DEBUG: Working in {base_path}")
+print(f"Working directory: {base_path}")
 
-# 2. Robust Spark Connection with Retry Logic
-# -------------------------------------------------------------------------
-print("Establishing Spark connection...")
-max_retries = 5
-retry_delay = 15  # seconds
-
-for attempt in range(1, max_retries + 1):
-    try:
-        print(f"Connection attempt {attempt}/{max_retries}...")
-        # Touch metadata first (safer than executing queries immediately)
-        spark_version = spark.version
-        # Run a simple query to confirm the channel is fully open
-        spark.sql("SELECT 1").collect()
-        print(f"✅ Spark connection established (version {spark_version})")
-        break
-    except Exception as e:
-        error_msg = str(e)
-        if "Pending" in error_msg or "FAILED_PRECONDITION" in error_msg:
-            if attempt < max_retries:
-                print(f"⏳ Cluster still starting up. Waiting {retry_delay}s before retry {attempt + 1}...")
-                time.sleep(retry_delay)
-            else:
-                print(f"❌ Failed to connect after {max_retries} attempts.")
-                raise Exception(f"Serverless compute failed to become ready after {max_retries * retry_delay}s") from e
-        else:
-            # Different error - fail immediately
-            print(f"❌ Unexpected error: {error_msg}")
-            raise
-
-# 4. Imports (Only after Spark is stable)
+# 2. Imports
 # -------------------------------------------------------------------------
 import pyspark.sql.functions as F
 try:

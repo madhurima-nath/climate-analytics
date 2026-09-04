@@ -1,0 +1,1 @@
+# Script to create Gold schemas and final views

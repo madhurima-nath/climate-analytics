@@ -1,17 +1,19 @@
+# Location: src/transforms/common_transforms.py
 import pyspark.sql.functions as F
 from pyspark.sql import DataFrame
 
 def relational_normalisation(df: DataFrame, id_columns: list) -> DataFrame:
     """
     Restructures 'Wide' tables (years as columns) into 'Long' format.
-    Logic: Identifies columns starting with 'y' followed by 4 digits.
     """
     all_cols = df.columns
+    # Logic remains solid: detects 'y1990', 'y2020', etc.
     year_cols = [c for c in all_cols if c.startswith('y') and c[1:].isdigit()]
     
     if not year_cols:
-        return df # Return unchanged if no year columns exist
+        return df 
 
+    # .unpivot is standard in Spark 4.0+ (2026)
     return df.unpivot(
         ids=id_columns,
         values=year_cols,
@@ -23,11 +25,16 @@ def relational_normalisation(df: DataFrame, id_columns: list) -> DataFrame:
     )
 
 def geospatial_indexing(df: DataFrame, lat_col: str, lon_col: str) -> DataFrame:
-    """Maps coordinates to Uber H3 Hexagons at Resolution 6."""
-    # Assuming the H3 library is pre-installed in the 2026 runtime
-    import h3
-    h3_udf = F.udf(lambda lat, lon: h3.geo_to_h3(lat, lon, 6))
-    return df.withColumn("h3_index_res6", h3_udf(F.col(lat_col), F.col(lon_col)))
+    """
+    Maps coordinates to Uber H3 Hexagons.
+    2026 UPDATE: Using native h3_longlatash3 for memory efficiency on Serverless.
+    """
+    # We use the built-in h3 function instead of a Python UDF
+    # Resolution 6 (as requested)
+    return df.withColumn(
+        "h3_index_res6", 
+        F.expr(f"h3_longlatash3({lon_col}, {lat_col}, 6)")
+    )
 
 def calculate_thermal_stress(df: DataFrame, temp_col: str) -> DataFrame:
     """Calculates Heating (Base 15C) and Cooling (Base 25C) degree days."""

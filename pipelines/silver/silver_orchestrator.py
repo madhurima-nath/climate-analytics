@@ -1,116 +1,137 @@
+# Databricks notebook source
+# DBTITLE 1,Silver Orchestrator
 import os
 import sys
 import yaml
+import time
 import importlib
-from pyspark.sql import SparkSession
+
+# 1. Path Setup (Safe, no Spark calls)
+# -------------------------------------------------------------------------
+base_path = os.getcwd()
+project_root = os.path.abspath(os.path.join(base_path, "../../"))
+if project_root not in sys.path:
+    sys.path.append(project_root)
+
+CONFIG_DIR = os.path.join(base_path, 'configs')
+
+print(f"DEBUG: Working in {base_path}")
+
+# 2. Reduced Infrastructure Sleep
+# -------------------------------------------------------------------------
+# Short sleep to allow Serverless infrastructure to stabilize.
+# Reduced from 30s to 10s to avoid timeout issues.
+print("Waiting 10s for Serverless infrastructure to stabilize...")
+time.sleep(10)
+
+# 3. Safe Spark Handshake
+# -------------------------------------------------------------------------
+print("Connecting to Spark Engine...")
+try:
+    # In a notebook, 'spark' is already in the global namespace.
+    # We touch a metadata property (.version) first because it's safer.
+    print(f"Spark Version: {spark.version}")
+    # Run a simple SQL to confirm the active channel is open.
+    spark.sql("SELECT 1").collect()
+    print("Spark connection established.")
+except Exception as e:
+    print(f"Initial connection failed: {str(e)}. Retrying in 20s...")
+    time.sleep(20)
+    spark.sql("SELECT 1").collect()
+
+# 4. Imports (Only after Spark is stable)
+# -------------------------------------------------------------------------
 import pyspark.sql.functions as F
+try:
+    from src.common.audit_utils import get_last_watermark, update_audit_log
+    print("Project libraries loaded.")
+except ImportError as e:
+    print(f"Import Error: {e}")
+    # List files to help you debug if 'src' is missing
+    print(f"Project Root Contents: {os.listdir(project_root)}")
+    raise e
 
-# 1. Pathing: Ensure the worker can import from the 'src' library
-# -----------------------------------------------------------------------------
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
-
-from src.common.audit_utils import get_last_watermark, update_audit_log
-
-spark = SparkSession.builder.getOrCreate()
-
-# Constants
-CONFIG_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), 'configs'))
-
+# 5. Orchestration Function
+# -------------------------------------------------------------------------
 def run_silver_orchestration():
-    """
-    The main execution loop. 
-    Iterates through all YAML files in the configs directory and promotes 
-    data from Bronze to Silver incrementally.
-    """
-    
-    # Get all YAML files from the config directory
+    if not os.path.exists(CONFIG_DIR):
+        print(f"ERROR: Config folder missing at {CONFIG_DIR}")
+        return
+
     config_files = [f for f in os.listdir(CONFIG_DIR) if f.endswith('.yml')]
+    total_configs = len(config_files)
+    print(f"\n{'='*70}")
+    print(f"Starting Silver Orchestration: {total_configs} tables to process")
+    print(f"{'='*70}\n")
     
-    print(f"Found {len(config_files)} configurations. Beginning ingestion...")
+    completed = 0
+    skipped = 0
+    failed = 0
 
-    for config_file in config_files:
+    for idx, config_file in enumerate(config_files, 1):
         config_path = os.path.join(CONFIG_DIR, config_file)
+        print(f"\n[{idx}/{total_configs}] Processing: {config_file}")
+        print(f"Time: {time.strftime('%H:%M:%S')}")
         
-        with open(config_path, 'r') as f:
-            cfg = yaml.safe_load(f)
-        
-        target_table = cfg['target_table']
-        print(f"\n--- Processing Table: {target_table} ---")
-
         try:
-            # 2. State Management (Manual Watermarking)
-            # -----------------------------------------------------------------
-            # Find the last processed timestamp for this specific table.
+            with open(config_path, 'r') as f:
+                cfg = yaml.safe_load(f)
+            
+            target_table = cfg['target_table']
             last_ts = get_last_watermark(target_table)
             
-            # 3. Data Extraction
-            # -----------------------------------------------------------------
-            # Load all sources defined in the YAML into a dictionary.
-            # We filter the primary source (the first one) by the watermark.
+            # Extract
             sources = {}
             for key, table_path in cfg['sources'].items():
+                df = spark.table(table_path)
                 if cfg.get('watermark_column'):
-                    # Incremental load for the primary data source
-                    sources[key] = spark.table(table_path).filter(F.col(cfg['watermark_column']) > last_ts)
+                    sources[key] = df.filter(F.col(cfg['watermark_column']) > last_ts)
                 else:
-                    # Full load for static dimensions (like stations or peatlands)
-                    sources[key] = spark.table(table_path)
+                    sources[key] = df
 
-            # Check if there is new data to process
-            # (If sources is empty, like in dim_date, we proceed to generation)
             if sources and all(df.isEmpty() for df in sources.values()):
-                print(f"No new data for {target_table}. Skipping.")
+                print(f"✅ No new data. Skipping {target_table}")
+                skipped += 1
                 continue
 
-            # 4. Dynamic Logic Execution
-            # -----------------------------------------------------------------
-            # Load the domain module (e.g., src.transforms.weather)
+            # Transform
             module = importlib.import_module(f"src.transforms.{cfg['module']}")
-            # Get the specific function (e.g., process_weather_historical)
             transform_func = getattr(module, cfg['function'])
-            
-            # Execute the transformation
             silver_df = transform_func(sources, cfg.get('params', {}))
 
-            # 5. Delta Merge (Upsert) Logic
-            # -----------------------------------------------------------------
-            # We use the 'merge_keys' from the YAML to prevent duplicates.
+            # Load
+            row_count = silver_df.count()
             if not spark.catalog.tableExists(target_table):
-                # First-time load: Create table and apply Genie description
                 silver_df.write.format("delta").mode("overwrite").saveAsTable(target_table)
-                spark.sql(f"COMMENT ON TABLE {target_table} IS '{cfg['description']}'")
-                print(f"Table {target_table} created.")
+                print(f"✅ Created {target_table} ({row_count:,} rows)")
             else:
-                # Incremental load: Perform a Delta MERGE
                 silver_df.createOrReplaceTempView("v_updates")
-                
-                # Dynamically build the join condition from the YAML merge_keys
-                join_condition = " AND ".join([f"t.{k} = s.{k}" for k in cfg['merge_keys']])
-                
-                merge_sql = f"""
-                    MERGE INTO {target_table} t
-                    USING v_updates s
-                    ON {join_condition}
-                    WHEN MATCHED THEN UPDATE SET *
-                    WHEN NOT MATCHED THEN INSERT *
-                """
-                spark.sql(merge_sql)
-                print(f"Delta Merge complete for {target_table}.")
+                join_cond = " AND ".join([f"t.{k} = s.{k}" for k in cfg['merge_keys']])
+                spark.sql(f"MERGE INTO {target_table} t USING v_updates s ON {join_cond} WHEN MATCHED THEN UPDATE SET * WHEN NOT MATCHED THEN INSERT *")
+                print(f"✅ Merged {target_table} ({row_count:,} rows)")
+            
+            completed += 1
 
-            # 6. Finalise Audit
-            # -----------------------------------------------------------------
+            # Audit
             if cfg.get('watermark_column'):
-                # Extract the latest ingested_at timestamp from the primary source
-                primary_source_key = list(cfg['sources'].keys())[0]
-                new_watermark = sources[primary_source_key].select(F.max(cfg['watermark_column'])).collect()[0][0]
-                update_audit_log(target_table, new_watermark, silver_df.count())
-                print(f"Audit log updated with watermark: {new_watermark}")
+                primary_key = list(cfg['sources'].keys())[0]
+                new_wm = sources[primary_key].select(F.max(cfg['watermark_column'])).collect()[0][0]
+                update_audit_log(target_table, new_wm, row_count)
+
+            spark.catalog.clearCache()
 
         except Exception as e:
-            print(f"ERROR processing {target_table}: {str(e)}")
-            # On Free Edition, we log the error but continue to the next table 
-            # to maximise the 2-hour compute window.
+            print(f"❌ Failed {config_file}: {str(e)}")
+            failed += 1
             continue
+    
+    print(f"\n{'='*70}")
+    print(f"Orchestration Complete!")
+    print(f"  ✅ Completed: {completed}")
+    print(f"  ⏭️  Skipped: {skipped}")
+    print(f"  ❌ Failed: {failed}")
+    print(f"{'='*70}")
 
-if __name__ == "__main__":
-    run_silver_orchestration()
+# 6. Execution
+# -------------------------------------------------------------------------
+run_silver_orchestration()

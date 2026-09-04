@@ -25,12 +25,12 @@ function: "process_forest_inventory"
 # Monitors the 'fao_data' table for new manual uploads.
 watermark_column: "ingested_at"
 
-# Identifies a unique record by Country, Year, and Land-Use Item.
+# Identifies a unique record by Country, Year, and Land-Use Category.
 # Prevents duplicate entries during incremental FAO data updates.
 merge_keys:
   - "country_name"
   - "year"
-  - "item"
+  - "land_use_category"
 
 # =============================================================================
 # PARAMETERS

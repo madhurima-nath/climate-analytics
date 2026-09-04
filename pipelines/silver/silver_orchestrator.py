@@ -17,27 +17,34 @@ CONFIG_DIR = os.path.join(base_path, 'configs')
 
 print(f"DEBUG: Working in {base_path}")
 
-# 2. Reduced Infrastructure Sleep
+# 2. Robust Spark Connection with Retry Logic
 # -------------------------------------------------------------------------
-# Short sleep to allow Serverless infrastructure to stabilize.
-# Reduced from 30s to 10s to avoid timeout issues.
-print("Waiting 10s for Serverless infrastructure to stabilize...")
-time.sleep(10)
+print("Establishing Spark connection...")
+max_retries = 5
+retry_delay = 15  # seconds
 
-# 3. Safe Spark Handshake
-# -------------------------------------------------------------------------
-print("Connecting to Spark Engine...")
-try:
-    # In a notebook, 'spark' is already in the global namespace.
-    # We touch a metadata property (.version) first because it's safer.
-    print(f"Spark Version: {spark.version}")
-    # Run a simple SQL to confirm the active channel is open.
-    spark.sql("SELECT 1").collect()
-    print("Spark connection established.")
-except Exception as e:
-    print(f"Initial connection failed: {str(e)}. Retrying in 20s...")
-    time.sleep(20)
-    spark.sql("SELECT 1").collect()
+for attempt in range(1, max_retries + 1):
+    try:
+        print(f"Connection attempt {attempt}/{max_retries}...")
+        # Touch metadata first (safer than executing queries immediately)
+        spark_version = spark.version
+        # Run a simple query to confirm the channel is fully open
+        spark.sql("SELECT 1").collect()
+        print(f"✅ Spark connection established (version {spark_version})")
+        break
+    except Exception as e:
+        error_msg = str(e)
+        if "Pending" in error_msg or "FAILED_PRECONDITION" in error_msg:
+            if attempt < max_retries:
+                print(f"⏳ Cluster still starting up. Waiting {retry_delay}s before retry {attempt + 1}...")
+                time.sleep(retry_delay)
+            else:
+                print(f"❌ Failed to connect after {max_retries} attempts.")
+                raise Exception(f"Serverless compute failed to become ready after {max_retries * retry_delay}s") from e
+        else:
+            # Different error - fail immediately
+            print(f"❌ Unexpected error: {error_msg}")
+            raise
 
 # 4. Imports (Only after Spark is stable)
 # -------------------------------------------------------------------------

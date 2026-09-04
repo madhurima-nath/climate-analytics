@@ -8,33 +8,69 @@ variables:
 
 resources:
   jobs:
-    climate_data_pipeline:
-      name: "Climate and Energy Pipeline"
-      timeout_seconds: 0  # 0 = no timeout (uses workspace default)
-      max_concurrent_runs: 1
-      queue:
-        enabled: true
-
+    # === MODULAR SILVER LAYER JOBS ===
+    # Run independently or chain together as needed
+    
+    # Job 1: Infrastructure Setup (idempotent, safe to re-run)
+    silver_infrastructure_setup:
+      name: "Silver: Infrastructure Setup"
       tasks:
-        # --- SILVER LAYER START ---
-        
-        - task_key: initialise_silver_infrastructure
+        - task_key: create_audit_table
           sql_task:
             file:
               path: "./pipelines/silver/setup_silver.sql"
             warehouse_id: "${var.warehouse_id}"
 
-
-        - task_key: run_silver_orchestrator
-          depends_on:
-            - task_key: initialise_silver_infrastructure
+    # Job 2: Data Load (run when you have new/updated Bronze data)
+    silver_data_load:
+      name: "Silver: Data Load"
+      timeout_seconds: 0
+      max_concurrent_runs: 1
+      queue:
+        enabled: true
+      tasks:
+        - task_key: run_orchestrator
           notebook_task:
             notebook_path: "./pipelines/silver/silver_orchestrator.py"
 
+    # Job 3: Validation (run independently, checks for data changes)
+    silver_validation:
+      name: "Silver: Data Validation"
+      tasks:
+        - task_key: run_validation_tests
+          notebook_task:
+            notebook_path: "./src/tests/run_all_tests_notebook.py"
 
+    # === FULL PIPELINE (chains all three) ===
+    # Use this for CI/CD or complete end-to-end runs
+    climate_data_pipeline:
+      name: "Climate Data Pipeline (Full)"
+      timeout_seconds: 0
+      max_concurrent_runs: 1
+      queue:
+        enabled: true
+      tasks:
+        - task_key: setup_infrastructure
+          sql_task:
+            file:
+              path: "./pipelines/silver/setup_silver.sql"
+            warehouse_id: "${var.warehouse_id}"
+
+        - task_key: load_silver_data
+          depends_on:
+            - task_key: setup_infrastructure
+          notebook_task:
+            notebook_path: "./pipelines/silver/silver_orchestrator.py"
+
+        - task_key: validate_silver_data
+          depends_on:
+            - task_key: load_silver_data
+          notebook_task:
+            notebook_path: "./src/tests/run_all_tests_notebook.py"
+          
         # --- GOLD LAYER (ADD HERE LATER) ---
         # You will add your Gold task below this line later. 
-        # It will 'depend_on' the run_silver_orchestrator task.
+        # It will 'depend_on' the validate_silver_data task.
 
 targets:
   dev:

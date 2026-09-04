@@ -100,7 +100,7 @@ def run_silver_orchestration():
                 new_wm = sources[primary_key].select(F.max(cfg['watermark_column'])).collect()[0][0]
                 update_audit_log(target_table, new_wm, row_count)
 
-            spark.catalog.clearCache()
+            # spark.catalog.clearCache()  # Not supported on serverless compute
 
         except Exception as e:
             print(f"❌ Failed {config_file}: {str(e)}")

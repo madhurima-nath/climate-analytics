@@ -2,7 +2,7 @@
 from pyspark.sql import DataFrame
 import pyspark.sql.functions as F
 
-def process_energy_metrics(sources: dict) -> DataFrame:
+def process_energy_metrics(sources: dict, params: dict) -> DataFrame:
     """
     Cleans and standardizes OWID energy data.
     Focuses on demand, generation, population, and GDP.

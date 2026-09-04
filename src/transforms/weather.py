@@ -33,7 +33,7 @@ def process_weather_historical(sources: dict, params: dict) -> DataFrame:
 
     return df.select("country", "date", "temp_max_c", "temp_min_c", "temp_mean_c", "hdd_15", "cdd_25")
 
-def process_weather_observations(sources: dict) -> DataFrame:
+def process_weather_observations(sources: dict, params: dict) -> DataFrame:
     """
     Standardizes NOAA GSOD data from Imperial to Metric.
     """

@@ -2,7 +2,7 @@
 from pyspark.sql import DataFrame
 import pyspark.sql.functions as F
 
-def process_forest_inventory(sources: dict) -> DataFrame:
+def process_forest_inventory(sources: dict, params: dict) -> DataFrame:
     """
     Consolidates FAO Land Use and Carbon data.
     Unpivots 'Wide' year columns into 'Long' format.

@@ -2,7 +2,7 @@
 from pyspark.sql import DataFrame
 import pyspark.sql.functions as F
 
-def create_dim_locations(sources: dict) -> DataFrame:
+def create_dim_locations(sources: dict, params: dict) -> DataFrame:
     """
     Joins FAO and OWID metadata to create a single master list of countries.
     This ensures every country has a standard ISO Alpha-3 code.
@@ -25,7 +25,7 @@ def create_dim_locations(sources: dict) -> DataFrame:
     # Join them together so we have one 'Master' mapping table
     return owid_clean.join(fao_clean, on="country_name", how="inner")
 
-def create_dim_date(params: dict) -> DataFrame:
+def create_dim_date(sources: dict, params: dict) -> DataFrame:
     """
     Generates a calendar from 2010 to 2050 with weekend and season flags.
     """

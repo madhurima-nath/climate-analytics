@@ -2,6 +2,27 @@
 
 This document details the engineering decisions and physical thresholds used to harmonise climate, energy, and forestry datasets.
 
+## Pipeline Architecture
+
+**Entry Point:** `pipelines/silver/silver_orchestrator.py` (notebook)
+**Setup Script:** `pipelines/silver/setup_silver.sql`
+**Configuration:** YAML files in `pipelines/silver/configs/`
+**Transform Logic:** Python modules in `src/transforms/`
+**Audit Utilities:** `src/common/audit_utils` (get_last_watermark, update_audit_log)
+
+**Dependencies:**
+1. `initialise_silver_infrastructure` → creates audit table
+2. `run_silver_orchestrator` → processes all configs
+3. `validate_silver_tables` → runs unit tests
+
+**Orchestration Flow:**
+1. Load YAML config from `pipelines/silver/configs/*.yml`
+2. Check last watermark from `climate_energy_demand.silver.ingestion_audit`
+3. Extract: Load source tables and filter by watermark
+4. Transform: Import and execute function from `src.transforms.{module}.{function}`
+5. Load: MERGE INTO target table using merge_keys
+6. Audit: Update watermark and row count
+
 ## 1. Climate Stress Metrics (Degree Days)
 To model the energy demand required for climate control, we implement a "Neutral Band" approach:
 *   **Heating (Base 15°C):** Triggered when the daily mean temperature is below 15°C.

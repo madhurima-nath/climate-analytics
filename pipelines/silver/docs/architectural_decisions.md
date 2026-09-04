@@ -24,12 +24,25 @@
 
 ## 4: Metadata-Driven State Management
 *   **Context:** Incremental pipelines require a way to remember which data has already been processed.
-*   **Decision:** We will use a physical Delta table (`silver.metadata.ingestion_audit`) to store high-water marks (timestamps) for every Silver table.
+*   **Decision:** We use a physical Delta table (`climate_energy_demand.silver.ingestion_audit`) to store high-water marks (timestamps) for every Silver table.
+*   **Location:** Created by `pipelines/silver/setup_silver.sql`
+*   **Schema:** `table_name STRING, last_watermark TIMESTAMP, rows_processed INT, processed_at TIMESTAMP`
 *   **Pros:** 
     *   **Transparency:** The AI/BI Genie and human auditors can query the table to see data freshness.
     *   **Persistence:** Unlike local memory, the state is preserved if a cluster fails.
 *   **Cons:** Requires a "Bootstrap" step to create the table before pipelines can run.
 *   **Alternative:** Spark Checkpoints. *Rejected:* Checkpoint files are opaque and cannot be easily queried by BI tools.
+
+## 6: Config-Driven Orchestration
+*   **Context:** Silver layer processes multiple tables with similar patterns but different sources and transformations.
+*   **Decision:** Use YAML configs (`pipelines/silver/configs/*.yml`) to define each table's sources, transform module, merge keys, and watermark column.
+*   **Orchestrator:** `pipelines/silver/silver_orchestrator.py` iterates through all configs and executes the ETL pattern.
+*   **Pros:**
+    *   **Separation of Concerns:** Table definitions (YAML) separate from orchestration logic (Python).
+    *   **Maintainability:** Adding a new Silver table requires only a new YAML file, no code changes.
+    *   **Auditability:** Config files are version-controlled and human-readable.
+*   **Cons:** Requires discipline to keep YAML schema consistent.
+*   **Alternative:** Hard-coded tables in orchestrator. *Rejected:* Not scalable; every new table requires code modification.
 
 
 ## 5. Why use SQL over Python for setup?

@@ -11,7 +11,12 @@ def process_forest_inventory(sources: dict, params: dict) -> DataFrame:
     items = sources["fao_items"]
     
     # 1. Join with Metadata to get human-readable item names (e.g., 'Forest land')
-    df = data.join(items, on="item_code", how="inner")
+    # Qualify columns to avoid ambiguous references (both tables have 'item')
+    df = data.alias("data").join(
+        items.alias("items"),
+        on="item_code",
+        how="inner"
+    )
     
     # 2. Identify Year Columns (those starting with 'y' like y2010, y2011)
     year_cols = [c for c in df.columns if c.startswith("y") and c[1:].isdigit()]
@@ -22,7 +27,7 @@ def process_forest_inventory(sources: dict, params: dict) -> DataFrame:
     
     df_long = df.select(
         F.col("area").alias("country_name"),
-        "item",
+        F.col("items.item").alias("land_use_category"),  # e.g., "Forest land", "Cropland"
         "unit",
         F.expr(stack_expr)
     )

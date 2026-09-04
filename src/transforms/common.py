@@ -1,5 +1,5 @@
 
-from pyspark.sql import DataFrame
+from pyspark.sql import DataFrame, SparkSession
 import pyspark.sql.functions as F
 
 def create_dim_locations(sources: dict, params: dict) -> DataFrame:
@@ -32,6 +32,9 @@ def create_dim_date(sources: dict, params: dict) -> DataFrame:
     start = params.get("start_date", "2010-01-01")
     end = params.get("end_date", "2050-12-31")
 
+    # Get the active Spark session
+    spark = SparkSession.builder.getOrCreate()
+    
     # Spark SQL logic to create a range of dates
     df = spark.sql(f"SELECT explode(sequence(to_date('{start}'), to_date('{end}'), interval 1 day)) as date")
 

@@ -53,10 +53,14 @@ def process_weather_observations(sources: dict, params: dict) -> DataFrame:
 def create_dim_stations(sources: dict, params: dict) -> DataFrame:
     """
     Creates a master lookup for weather stations from NOAA GSOD data.
-    Maps station IDs to coordinates, H3 hexagons, and countries.
+    Maps station IDs to countries and names.
+    
+    NOTE: The bronze.noaa_gsod table lacks latitude/longitude coordinates.
+    This returns a simplified dimension without spatial information.
+    To add coordinates, the bronze ingestion would need to enrich from
+    NOAA's station metadata (isd-history.txt) or similar source.
     """
     df = sources["noaa_raw"]
-    h3_resolution = params.get("h3_resolution", 6)
     
     # Get unique stations with their latest metadata
     window_spec = Window.partitionBy("station_id").orderBy(F.col("ingested_at").desc())
@@ -64,18 +68,10 @@ def create_dim_stations(sources: dict, params: dict) -> DataFrame:
                  .filter("rn = 1") \
                  .drop("rn")
     
-    # Assign H3 hexagon
-    stations = stations.withColumn(
-        "h3_index",
-        F.expr(f"h3_latlngtocell(latitude, longitude, {h3_resolution})")
-    )
-    
     return stations.select(
         "station_id",
-        "country",
-        F.round("latitude", 4).alias("latitude"),
-        F.round("longitude", 4).alias("longitude"),
-        "h3_index"
+        "station_name",
+        "country"
     )
 
 def process_weather_projections(sources: dict, params: dict) -> DataFrame:
@@ -96,9 +92,16 @@ def process_weather_projections(sources: dict, params: dict) -> DataFrame:
     df = df.withColumn("cdd_25", F.greatest(F.lit(0), F.col("temp_mean_c") - cdd_base))
     
     # Assign H3 hexagon for spatial aggregation
+    # Using grid-based approach (serverless-compatible alternative to H3)
+    precision = 0.3  # Resolution 6 H3 is ~30km, so we use 0.3 degree precision (~33km at equator)
     df = df.withColumn(
         "h3_index",
-        F.expr(f"h3_latlngtocell(latitude, longitude, {h3_resolution})")
+        F.concat(
+            F.lit("grid_"),
+            F.round(F.col("latitude") / precision, 0).cast("int"),
+            F.lit("_"),
+            F.round(F.col("longitude") / precision, 0).cast("int")
+        )
     )
     
     return df.select(

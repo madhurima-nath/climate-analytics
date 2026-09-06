@@ -4,6 +4,6 @@ CREATE TABLE IF NOT EXISTS climate_energy_demand.silver.ingestion_audit (
     last_watermark TIMESTAMP,
     rows_processed INT,
     processed_at TIMESTAMP
-) USING DELTA;
-
-COMMENT ON TABLE climate_energy_demand.silver.ingestion_audit IS 'Tracks progress for the Silver standardisation layer.';
+)
+USING DELTA
+COMMENT 'Tracks progress for the Silver standardisation layer.';

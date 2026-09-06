@@ -94,8 +94,8 @@ def run_silver_orchestration():
             
             completed += 1
 
-            # Audit
-            if cfg.get('watermark_column'):
+            # Audit (only if rows were processed)
+            if cfg.get('watermark_column') and row_count > 0:
                 primary_key = list(cfg['sources'].keys())[0]
                 new_wm = sources[primary_key].select(F.max(cfg['watermark_column'])).collect()[0][0]
                 update_audit_log(target_table, new_wm, row_count)

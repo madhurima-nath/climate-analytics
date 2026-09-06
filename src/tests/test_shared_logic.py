@@ -7,7 +7,13 @@ from pyspark.sql import SparkSession
 
 @pytest.fixture(scope="session")
 def spark_session():
-    return SparkSession.builder.master("local[1]").getOrCreate()
+    """Get or create Spark session for tests."""
+    spark = SparkSession.getActiveSession()
+    if spark is None:
+        spark = SparkSession.builder \
+            .appName("SharedLogicTests") \
+            .getOrCreate()
+    return spark
 
 def test_calculate_thermal_stress(spark_session):
     # Mock data: 10C (Heating expected) and 30C (Cooling expected)

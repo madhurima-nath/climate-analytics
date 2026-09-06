@@ -7,11 +7,6 @@ from pyspark.sql import SparkSession
 import sys
 import os
 
-# Add project root to path
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
-if project_root not in sys.path:
-    sys.path.append(project_root)
-
 from src.common.audit_utils import get_last_watermark, update_audit_log, AUDIT_TABLE
 
 @pytest.fixture(scope="session")

@@ -31,16 +31,20 @@ def process_weather_historical(sources: dict, params: dict) -> DataFrame:
     df = df.withColumn("hdd_15", F.greatest(F.lit(0), hdd_base - F.col("temp_mean_c")))
     df = df.withColumn("cdd_25", F.greatest(F.lit(0), F.col("temp_mean_c") - cdd_base))
 
-    return df.select("country", "date", "temp_max_c", "temp_min_c", "temp_mean_c", "hdd_15", "cdd_25")
+    # Note: Deduplication already done in step 1, but ensure final output is clean
+    return df.select("country", "date", "temp_max_c", "temp_min_c", "temp_mean_c", "hdd_15", "cdd_25") \
+             .dropDuplicates(["country", "date"])
 
 def process_weather_observations(sources: dict, params: dict) -> DataFrame:
     """
     Standardizes NOAA GSOD data from Imperial to Metric.
+    Filters out invalid/missing data indicators (9999.9, 999.9)
     """
     df = sources["noaa_raw"]
 
     # Conversions: (F - 32) * 5/9 = C  |  Inches * 25.4 = mm
-    return df.select(
+    # NOAA uses 9999.9 and 999.9 as missing data indicators
+    result = df.select(
         "country",
         "station_id",
         F.to_date("date").alias("date"),
@@ -49,6 +53,17 @@ def process_weather_observations(sources: dict, params: dict) -> DataFrame:
         F.round((F.col("min") - 32) * 5/9, 2).alias("temp_min_c"),
         F.round(F.col("prcp") * 25.4, 2).alias("precip_mm")
     )
+    
+    # Filter out invalid temperatures (missing data indicators convert to ~5500°C)
+    # Valid range: -60°C to 60°C
+    result = result.filter(
+        (F.col("temp_mean_c").between(-60, 60)) &
+        (F.col("temp_max_c").between(-60, 60)) &
+        (F.col("temp_min_c").between(-60, 60))
+    )
+    
+    # Deduplicate on primary key
+    return result.dropDuplicates(["station_id", "date"])
 
 def create_dim_stations(sources: dict, params: dict) -> DataFrame:
     """
@@ -104,6 +119,7 @@ def process_weather_projections(sources: dict, params: dict) -> DataFrame:
         )
     )
     
+    # Deduplicate on primary key
     return df.select(
         "model",
         "country",
@@ -117,4 +133,4 @@ def process_weather_projections(sources: dict, params: dict) -> DataFrame:
         F.round("hdd_15", 2).alias("hdd_15"),
         F.round("cdd_25", 2).alias("cdd_25"),
         "ingested_at"
-    )
+    ).dropDuplicates(["model", "country", "date"])

@@ -10,6 +10,7 @@ def process_energy_metrics(sources: dict, params: dict) -> DataFrame:
     df = sources["owid_raw"]
 
     # Select core columns and ensure types are correct
+    # Filter out records with null iso_code (primary key) and duplicates
     return df.select(
         F.col("iso_code"),
         F.col("country").alias("country_name"),
@@ -18,4 +19,7 @@ def process_energy_metrics(sources: dict, params: dict) -> DataFrame:
         F.col("electricity_generation").alias("generation_twh"),
         F.col("population"),
         F.col("gdp")
-    ).filter("year >= 2010") # Align with our weather data start date
+    ).filter(
+        (F.col("iso_code").isNotNull()) &  # Remove null primary keys
+        (F.col("year") >= 2010)  # Align with our weather data start date
+    ).dropDuplicates(["iso_code", "year"])  # Deduplicate on primary key

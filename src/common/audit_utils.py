@@ -3,6 +3,8 @@
 
 from pyspark.sql import SparkSession
 import pyspark.sql.functions as F
+from datetime import datetime
+from pyspark.sql.types import StructType, StructField, StringType, TimestampType, IntegerType
 
 # Finalised 3-level reference (Unity Catalog)
 AUDIT_TABLE = "climate_energy_demand.silver.ingestion_audit"
@@ -10,7 +12,6 @@ AUDIT_TABLE = "climate_energy_demand.silver.ingestion_audit"
 def get_last_watermark(target_table_name: str):
     # Get the session that is ALREADY running in the notebook
     spark = SparkSession.getActiveSession()
-    from datetime import datetime
     
     try:
         res = spark.table(AUDIT_TABLE) \
@@ -23,9 +24,6 @@ def get_last_watermark(target_table_name: str):
 
 def update_audit_log(table_name: str, watermark, count: int):
     spark = SparkSession.getActiveSession()
-    # Use parameterized query to preserve full timestamp precision
-    from pyspark.sql.types import StructType, StructField, StringType, TimestampType, IntegerType
-    from datetime import datetime
     
     # Convert string watermark to timestamp if needed
     if isinstance(watermark, str):

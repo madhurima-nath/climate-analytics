@@ -23,7 +23,9 @@ def create_dim_locations(sources: dict, params: dict) -> DataFrame:
     ).distinct()
 
     # Join them together so we have one 'Master' mapping table
-    return owid_clean.join(fao_clean, on="country_name", how="inner")
+    # Deduplicate on primary key (country_code which is iso_code)
+    result = owid_clean.join(fao_clean, on="country_name", how="inner")
+    return result.select("country_name", "iso_code", "fao_code").dropDuplicates(["iso_code"])
 
 def create_dim_date(sources: dict, params: dict) -> DataFrame:
     """

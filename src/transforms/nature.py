@@ -32,5 +32,7 @@ def process_forest_inventory(sources: dict, params: dict) -> DataFrame:
         F.expr(stack_expr)
     )
     
-    # 4. Final Cleanup: Cast year to INT and filter for our study period
-    return df_long.withColumn("year", F.col("year").cast("int")).filter("year >= 2010")
+    # 4. Final Cleanup: Cast year to INT, filter for our study period, and deduplicate
+    return df_long.withColumn("year", F.col("year").cast("int")) \
+                  .filter("year >= 2010") \
+                  .dropDuplicates(["country_name", "year", "land_use_category"])

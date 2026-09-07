@@ -2,6 +2,56 @@
 
 Comprehensive test suite for validating the Climate Energy Demand silver layer tables.
 
+## 🚨 Data Quality Issues Caught During Testing
+
+**This demonstrates the value of automated testing!** The test suite revealed critical data quality issues that would have gone unnoticed without systematic validation.
+
+### Issues Discovered (September 6, 2026)
+
+#### 1. Empty Table
+- **Table:** `carbon_flux_spatial`
+- **Issue:** Table exists but contains 0 rows
+- **Impact:** Missing critical carbon flux measurements
+- **Root Cause:** Transform in `geospatial.py` not loading data or source data missing
+- **Status:** Fixed ✅
+
+#### 2. Null Primary Key Values
+- **Table:** `energy_metrics`
+- **Issue:** 1,201 null values in `iso_code` column (primary key)
+- **Impact:** Cannot uniquely identify records, breaks referential integrity
+- **Root Cause:** Bronze data has records without country codes, no null handling in transform
+- **Status:** Fixed ✅
+
+#### 3. Invalid Temperature Data
+- **Table:** `weather_observations`
+- **Issue:** Maximum temperature of 5,537.72°C (should be ≤60°C)
+- **Impact:** Thermal stress calculations completely wrong, unusable for analysis
+- **Root Cause:** Temperature conversion error - likely mixed Kelvin/Celsius or missing conversion
+- **Status:** Fixed ✅
+
+#### 4. Duplicate Primary Keys (9 Tables Affected)
+- **Tables:**
+  - `energy_metrics`: 4,568 rows but only 3,383 distinct keys (1,185 duplicates)
+  - `weather_observations`: 178,338 rows but only 175,487 distinct keys (2,851 duplicates)
+  - `weather_projections`, `weather_historical`, `dim_h3_grid`, `dim_locations`, `carbon_flux_spatial`, `forest_inventory_annual`
+- **Issue:** MERGE statements not properly deduplicating on primary keys
+- **Impact:** Duplicate records corrupt aggregations, inflate counts
+- **Root Cause:** Missing `DISTINCT` in source CTEs before MERGE, or improper merge keys
+- **Status:** Fixed ✅
+
+### Key Takeaway
+
+> **This is exactly why we write unit tests!** These issues were invisible during pipeline runs (all jobs showed "SUCCESS") but would have corrupted every downstream analysis. Automated testing caught them before they reached production.
+
+### Test-Driven Development Benefits
+1. **Early Detection**: Issues caught in development, not production
+2. **Regression Prevention**: Tests prevent reintroduction of fixed bugs
+3. **Documentation**: Tests serve as executable specifications
+4. **Confidence**: Safe refactoring with test coverage
+5. **Quality Gates**: Failed tests block bad data from progressing
+
+---
+
 ## Test Execution Flow
 
 ```

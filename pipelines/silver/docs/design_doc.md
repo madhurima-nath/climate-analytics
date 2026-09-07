@@ -4,24 +4,165 @@ This document details the engineering decisions and physical thresholds used to 
 
 ## Pipeline Architecture
 
+### Component Overview (Modular Architecture)
+
+```
+Modular Jobs (Run independently):
+
+┌─────────────────────────────────────────────────────────────────┐
+│  Job 1: silver_infrastructure_setup                            │
+│  └─> Creates ingestion_audit table (idempotent)                 │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│  Job 2: silver_data_load                                       │
+│  └─> Runs orchestrator to load/update Silver tables            │
+│      (Run when you have new Bronze data)                        │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│  Job 3: silver_validation                                      │
+│  └─> Runs pytest tests with smart skip logic                   │
+│      ✅ Skips if no data changes since last validation          │
+│      📊 Compares audit watermarks to decide                     │
+└─────────────────────────────────────────────────────────────────┘
+
+
+Full Pipeline (chains all three for CI/CD):
+
+┌─────────────────────────────────────────────────────────────────┐
+│            Job 4: climate_data_pipeline (Full)                │
+└─────────────────────────────────────────────────────────────────┘
+
+   Task 1                    Task 2                    Task 3
+┌──────────────┐         ┌──────────────┐         ┌──────────────┐
+│ setup_silver │────────>│   silver_    │────────>│  validate_   │
+│     .sql     │         │ orchestrator │         │    silver    │
+│              │         │      .py     │         │   _tables    │
+│ Creates:     │         │              │         │              │
+│ • ingestion_ │         │ Processes:   │         │ Checks:      │
+│   audit tbl  │         │ • 10 configs │         │ • Watermarks │
+└──────────────┘         │ • 10 tables  │         │ • 45 tests   │
+                         └──────────────┘         └──────────────┘
+```
+
+### File Structure
+
 **Entry Point:** `pipelines/silver/silver_orchestrator.py` (notebook)
 **Setup Script:** `pipelines/silver/setup_silver.sql`
 **Configuration:** YAML files in `pipelines/silver/configs/`
 **Transform Logic:** Python modules in `src/transforms/`
 **Audit Utilities:** `src/common/audit_utils` (get_last_watermark, update_audit_log)
 
-**Dependencies:**
-1. `initialise_silver_infrastructure` → creates audit table
-2. `run_silver_orchestrator` → processes all configs
-3. `validate_silver_tables` → runs unit tests
+### Orchestration Flow (Per Config)
 
-**Orchestration Flow:**
-1. Load YAML config from `pipelines/silver/configs/*.yml`
-2. Check last watermark from `climate_energy_demand.silver.ingestion_audit`
-3. Extract: Load source tables and filter by watermark
-4. Transform: Import and execute function from `src.transforms.{module}.{function}`
-5. Load: MERGE INTO target table using merge_keys
-6. Audit: Update watermark and row count
+```
+   ┌─────────────────────────────────────────────────────────────┐
+   │  For each YAML config in pipelines/silver/configs/*.yml     │
+   └────────────────────────┬────────────────────────────────────┘
+                            │
+                            ▼
+         ┌──────────────────────────────────┐
+    ┌───┤  1. Load Config & Check Watermark│
+    │   └──────────────────────────────────┘
+    │                   │
+    │   climate_energy_demand.silver.ingestion_audit
+    │   └─> last_watermark for this table
+    │                   │
+    │                   ▼
+    │   ┌──────────────────────────────────┐
+    │   │  2. EXTRACT (from Bronze)        │
+    │   │                                  │
+    │   │  Sources = {}                    │
+    │   │  for each source in config:      │
+    │   │    df = spark.table(source)      │
+    │   │    filter by watermark_column    │
+    │   │    sources[key] = df             │
+    │   └──────────┬───────────────────────┘
+    │              │
+    │              ▼
+    │   ┌──────────────────────────────────┐
+    │   │  3. TRANSFORM                    │
+    │   │                                  │
+    │   │  module = src.transforms.{name}  │
+    │   │  func = getattr(module, func)    │
+    │   │  silver_df = func(sources, cfg)  │
+    │   └──────────┬───────────────────────┘
+    │              │
+    │              ▼
+    │   ┌──────────────────────────────────┐
+    │   │  4. LOAD (MERGE or CREATE)       │
+    │   │                                  │
+    │   │  if not exists:                  │
+    │   │    CREATE TABLE                  │
+    │   │  else:                           │
+    │   │    MERGE INTO target_table       │
+    │   │    USING silver_df               │
+    │   │    ON merge_keys                 │
+    │   └──────────┬───────────────────────┘
+    │              │
+    │              ▼
+    │   ┌──────────────────────────────────┐
+    │   │  5. AUDIT                        │
+    │   │                                  │
+    │   │  update_audit_log(               │
+    │   │    table_name,                   │
+    │   │    new_watermark,                │
+    │   │    rows_processed                │
+    │   │  )                               │
+    │   └──────────────────────────────────┘
+    │
+    └──> Next Config
+
+         ┌──────────────────────────────────┐
+         │  Summary Report                  │
+         │  • ✅ Completed: N                │
+         │  • ⏭️  Skipped: N                 │
+         │  • ❌ Failed: N                   │
+         └──────────────────────────────────┘
+```
+
+### Data Flow
+
+```
+┌─────────────┐
+│   Bronze    │  Raw ingestion layer
+│   Tables    │  • weather_raw
+└──────┬──────┘  • energy_raw
+       │         • forest_raw
+       │
+       │  Incremental Extract
+       │  (watermark filtering)
+       ▼
+┌─────────────┐
+│ src/        │  Python transformation modules
+│ transforms/ │  • process_weather_historical()
+└──────┬──────┘  • process_energy_metrics()
+       │         • process_forest_inventory()
+       │
+       │  Transform & Standardize
+       │  • Unit conversion
+       │  • Thermal stress calc
+       │  • H3 indexing
+       │  • Wide-to-long pivot
+       ▼
+┌─────────────┐
+│   Silver    │  Cleaned & standardized layer
+│   Tables    │  • weather_historical
+└─────────────┘  • energy_metrics
+                 • forest_inventory_annual
+                 • dim_* (dimensions)
+
+      Metadata:
+┌─────────────────────────────────────────┐
+│ climate_energy_demand.silver.           │
+│   ingestion_audit                       │
+│                                         │
+│  table_name  | last_watermark | rows   │
+│  weather_... | 2024-01-15     | 10000  │
+│  energy_...  | 2024-01-10     | 5000   │
+└─────────────────────────────────────────┘
+```
 
 ## 1. Climate Stress Metrics (Degree Days)
 To model the energy demand required for climate control, we implement a "Neutral Band" approach:

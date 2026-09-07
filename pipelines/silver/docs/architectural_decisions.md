@@ -15,6 +15,70 @@
 *   **Cons:** Higher latency than real-time streaming (not required for this use case).
 *   **Alternative:** Full Table Overwrite. *Rejected:* Wasteful of compute credits.
 
+### Watermarking Flow
+
+```
+First Run (Cold Start):
+┌────────────────────────────────────────────────────────────────┐
+│  get_last_watermark('silver.weather_historical')               │
+│  └─> No record found                                           │
+│  └─> Returns: 1900-01-01 00:00:00 (epoch default)             │
+└────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌────────────────────────────────────────────────────────────────┐
+│  Extract from Bronze:                                          │
+│  SELECT * FROM bronze.weather_raw                              │
+│  WHERE ingested_at > '1900-01-01'                              │
+│  └─> All data (full historical load)                           │
+└────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌────────────────────────────────────────────────────────────────┐
+│  Transform & Load: 10,000 rows → silver.weather_historical     │
+└────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌────────────────────────────────────────────────────────────────┐
+│  update_audit_log(                                             │
+│    table_name='silver.weather_historical',                     │
+│    last_watermark='2024-01-15 12:00:00',  ← max(ingested_at)  │
+│    rows_processed=10000                                        │
+│  )                                                             │
+└────────────────────────────────────────────────────────────────┘
+
+
+Subsequent Run (Incremental):
+┌────────────────────────────────────────────────────────────────┐
+│  get_last_watermark('silver.weather_historical')               │
+│  └─> Record found                                              │
+│  └─> Returns: 2024-01-15 12:00:00                             │
+└────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌────────────────────────────────────────────────────────────────┐
+│  Extract from Bronze:                                          │
+│  SELECT * FROM bronze.weather_raw                              │
+│  WHERE ingested_at > '2024-01-15 12:00:00'                     │
+│  └─> Only new data (100 rows)                                  │
+└────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌────────────────────────────────────────────────────────────────┐
+│  Transform & MERGE: 100 rows → silver.weather_historical       │
+│  (Upsert based on merge_keys: [station_id, date])             │
+└────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌────────────────────────────────────────────────────────────────┐
+│  update_audit_log(                                             │
+│    table_name='silver.weather_historical',                     │
+│    last_watermark='2024-01-20 09:00:00',  ← new max()          │
+│    rows_processed=100                                          │
+│  )                                                             │
+└────────────────────────────────────────────────────────────────┘
+```
+
 ## 3: Data Validation & Integrity Management
 *   **Context:** Sensor data often contains erroneous coordinates (e.g., 0,0 in the ocean).
 *   **Decision:** Implement a 'Land Mask' flag. Data not falling on known landmasses is flagged (`is_on_land = False`) and excluded from primary dashboards.
@@ -43,6 +107,75 @@
     *   **Auditability:** Config files are version-controlled and human-readable.
 *   **Cons:** Requires discipline to keep YAML schema consistent.
 *   **Alternative:** Hard-coded tables in orchestrator. *Rejected:* Not scalable; every new table requires code modification.
+
+### Config-Driven Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  pipelines/silver/configs/                                      │
+│  ├── weather_historical.yml                                     │
+│  ├── energy_metrics.yml                                         │
+│  ├── forest_inventory_annual.yml                                │
+│  ├── carbon_flux_spatial.yml                                    │
+│  ├── dim_locations.yml                                          │
+│  ├── dim_date.yml                                               │
+│  └── ... (10 configs total)                                     │
+└────────────┬────────────────────────────────────────────────────┘
+             │
+             │  Each YAML defines:
+             │  • target_table
+             │  • sources (Bronze tables)
+             │  • module & function (Transform)
+             │  • merge_keys (for UPSERT)
+             │  • watermark_column (for incremental)
+             │
+             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  silver_orchestrator.py                                         │
+│                                                                 │
+│  for config_file in configs/*.yml:                              │
+│    cfg = yaml.safe_load(config_file)                            │
+│    ┌──────────────────────────────────┐                        │
+│    │ Generic ETL Pattern:             │                        │
+│    │ 1. get_last_watermark()          │                        │
+│    │ 2. extract_sources()             │                        │
+│    │ 3. transform(sources, params)    │                        │
+│    │ 4. merge_or_create()             │                        │
+│    │ 5. update_audit_log()            │                        │
+│    └──────────────────────────────────┘                        │
+└────────────┬────────────────────────────────────────────────────┘
+             │
+             │  Transform logic in:
+             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  src/transforms/                                                │
+│  ├── weather.py                                                 │
+│  │   └── process_weather_historical()                           │
+│  ├── energy.py                                                  │
+│  │   └── process_energy_metrics()                               │
+│  ├── nature.py                                                  │
+│  │   └── process_forest_inventory()                             │
+│  └── common.py                                                  │
+│      ├── calculate_thermal_stress()                             │
+│      ├── geospatial_indexing()                                  │
+│      └── relational_normalisation()                             │
+└─────────────────────────────────────────────────────────────────┘
+
+  Adding a New Table = Creating One YAML File
+  ┌────────────────────────────────────────┐
+  │ new_table.yml                          │
+  │ ───────────────                        │
+  │ target_table: silver.new_table         │
+  │ sources:                               │
+  │   primary: bronze.new_source           │
+  │ module: transforms.new_module          │
+  │ function: process_new_data             │
+  │ merge_keys: [id, date]                 │
+  │ watermark_column: ingested_at          │
+  └────────────────────────────────────────┘
+           │
+           └─> Orchestrator auto-discovers and processes it
+```
 
 
 ## 5. Why use SQL over Python for setup?

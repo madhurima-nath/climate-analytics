@@ -1,5 +1,47 @@
 # Project Roadmap & Tier Scaling
 
+## Evolution Path
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                    Current: Community Edition                    │
+├──────────────────────────────────────────────────────────────────┤
+│  Compute:     Serverless (auto-selected)                         │
+│  Trigger:     Manual / DAB deploy                                │
+│  State:       Delta table watermarks                             │
+│  Spatial:     H3 Resolution 6 (~737 km²)                         │
+│  Testing:     pytest unit tests (45 tests)                       │
+└────────────────────────────┬─────────────────────────────────────┘
+                             │
+                             │ Upgrade
+                             ▼
+┌──────────────────────────────────────────────────────────────────┐
+│              Phase 1: Standard Edition (Paid Tier)               │
+├──────────────────────────────────────────────────────────────────┤
+│  Compute:     Job clusters (optimized sizing)                    │
+│  Trigger:     Scheduled jobs (cron) + File arrival               │
+│  Ingestion:   Auto Loader (cloud storage events)                 │
+│  State:       Delta table watermarks + Auto Loader checkpoints   │
+│  Spatial:     H3 Resolution 6 → 7 (~137 km²)                     │
+│  Testing:     Unit + Integration tests                           │
+└────────────────────────────┬─────────────────────────────────────┘
+                             │
+                             │ Scale Up
+                             ▼
+┌──────────────────────────────────────────────────────────────────┐
+│          Phase 2: Premium Edition (Production Scale)             │
+├──────────────────────────────────────────────────────────────────┤
+│  Compute:     Multi-node clusters + Photon acceleration          │
+│  Trigger:     Event-driven (table updates, file arrival)         │
+│  Pipeline:    Lakeflow Spark Declarative Pipelines (SDP)         │
+│  State:       SDP streaming checkpoints + DQM expectations       │
+│  Spatial:     H3 Resolution 8-9 (~1-5 km²) for urban analysis   │
+│  Data:        + Precipitation (ERA5-Land)                        │
+│  Monitoring:  Data Quality Monitoring (DQM) + Alerts             │
+│  Testing:     Unit + Integration + E2E + Performance             │
+└──────────────────────────────────────────────────────────────────┘
+```
+
 ## Current State: Databricks Community/Standard Edition
 *   **Compute:** Serverless compute (auto-selected).
 *   **Ingestion:** DAB-orchestrated batch processing with watermark-based incremental loads.

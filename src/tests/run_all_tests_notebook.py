@@ -152,7 +152,8 @@ for suite in test_suites:
         "--tb=short",
         "--color=yes",
         "--assert=plain",  # Disable assertion rewriting to prevent __pycache__ creation
-        "-p", "no:cacheprovider"  # Disable cache to prevent __pycache__ errors in Workspace filesystem
+        "-p", "no:cacheprovider",  # Disable cache to prevent __pycache__ errors in Workspace filesystem
+        "--import-mode=importlib"  # Use importlib to prevent __pycache__ creation during collection
     ]
     
     # Run tests

@@ -46,16 +46,16 @@ EXPECTED_SILVER_TABLES = [
 
 # Key columns that should not be null for each table
 KEY_COLUMNS = {
-    "climate_energy_demand.silver.energy_metrics": ["iso_code", "year"],
-    "climate_energy_demand.silver.weather_observations": ["station_id", "date"],
-    "climate_energy_demand.silver.weather_projections": ["station_id", "date"],
-    "climate_energy_demand.silver.weather_historical": ["station_id", "date"],
+    "climate_energy_demand.silver.energy_metrics": ["country_name", "year"],
+    "climate_energy_demand.silver.weather_observations": ["country", "station_id", "date"],
+    "climate_energy_demand.silver.weather_projections": ["model", "country", "date", "h3_index"],
+    "climate_energy_demand.silver.weather_historical": ["country", "date"],
     "climate_energy_demand.silver.dim_stations": ["station_id"],
-    "climate_energy_demand.silver.dim_h3_grid": ["h3_index"],
+    "climate_energy_demand.silver.dim_h3_grid": ["h3_cell"],
     "climate_energy_demand.silver.dim_date": ["date"],
-    "climate_energy_demand.silver.dim_locations": ["country_code"],
-    "climate_energy_demand.silver.carbon_flux_spatial": ["h3_index", "date"],
-    "climate_energy_demand.silver.forest_inventory_annual": ["country_code", "year"]
+    "climate_energy_demand.silver.dim_locations": ["iso_code"],
+    "climate_energy_demand.silver.carbon_flux_spatial": ["h3_cell", "year"],
+    "climate_energy_demand.silver.forest_inventory_annual": ["country_name", "land_use_category", "unit", "year"]
 }
 
 # Expected minimum row counts (adjust based on your data)
@@ -290,10 +290,10 @@ class TestGeospatialFunctions:
         df = spark_session.table(table_name)
         
         # Check that h3_index column exists and has no nulls
-        assert "h3_index" in df.columns, "h3_index column not found in dim_h3_grid"
+        assert "h3_cell" in df.columns, "h3_cell column not found in dim_h3_grid"
         
-        null_count = df.filter(col("h3_index").isNull()).count()
-        assert null_count == 0, f"Found {null_count} null h3_index values in dim_h3_grid"
+        null_count = df.filter(col("h3_cell").isNull()).count()
+        assert null_count == 0, f"Found {null_count} null h3_cell values in dim_h3_grid"
 
 # =============================================================================
 # TEST 7: DATA QUALITY SPOT CHECKS

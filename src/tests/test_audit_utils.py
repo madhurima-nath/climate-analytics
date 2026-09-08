@@ -68,7 +68,7 @@ def test_update_audit_log_creates_record(spark_session):
     update_audit_log(test_table, test_watermark, test_count)
     
     # Get count after
-    spark_session.catalog.refreshTable(AUDIT_TABLE)
+    # spark_session.catalog.refreshTable(AUDIT_TABLE)  # Not supported on serverless
     audit_df_after = spark_session.table(AUDIT_TABLE)
     count_after = audit_df_after.filter(audit_df_after.table_name == test_table).count()
     

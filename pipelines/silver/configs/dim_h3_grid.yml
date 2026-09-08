@@ -26,7 +26,7 @@ watermark_column: "ingested_at"
 
 # A unique record is defined by the H3 Cell ID and its classification.
 merge_keys:
-  - "h3_cell"
+  - "h3_index"
   - "land_type"
 
 # =============================================================================

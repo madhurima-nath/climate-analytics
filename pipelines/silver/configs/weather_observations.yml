@@ -27,6 +27,7 @@ watermark_column: "ingested_at"
 # A unique observation is defined by the Station ID and the Date.
 # This prevents data duplication during incremental station updates.
 merge_keys:
+  - "country"
   - "station_id"
   - "date"
 

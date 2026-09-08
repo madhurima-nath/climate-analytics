@@ -44,6 +44,13 @@ def process_weather_observations(sources: dict, params: dict) -> DataFrame:
 
     # Conversions: (F - 32) * 5/9 = C  |  Inches * 25.4 = mm
     # NOAA uses 9999.9 and 999.9 as missing data indicators
+    # Filter BEFORE conversion to avoid sentinel values (9999.9°F becomes 5537.72°C)
+    df = df.filter(
+        (F.col("temp").isNotNull()) & (F.col("temp") < 200) & (F.col("temp") > -100) &
+        (F.col("max").isNotNull()) & (F.col("max") < 200) & (F.col("max") > -100) &
+        (F.col("min").isNotNull()) & (F.col("min") < 200) & (F.col("min") > -100)
+    )
+    
     result = df.select(
         "country",
         "station_id",
@@ -54,16 +61,8 @@ def process_weather_observations(sources: dict, params: dict) -> DataFrame:
         F.round(F.col("prcp") * 25.4, 2).alias("precip_mm")
     )
     
-    # Filter out invalid temperatures (missing data indicators convert to ~5500°C)
-    # Valid range: -60°C to 60°C
-    result = result.filter(
-        (F.col("temp_mean_c").between(-60, 60)) &
-        (F.col("temp_max_c").between(-60, 60)) &
-        (F.col("temp_min_c").between(-60, 60))
-    )
-    
-    # Deduplicate on primary key
-    return result.dropDuplicates(["station_id", "date"])
+    # Deduplicate on primary key - include country to handle shared stations
+    return result.dropDuplicates(["country", "station_id", "date"])
 
 def create_dim_stations(sources: dict, params: dict) -> DataFrame:
     """

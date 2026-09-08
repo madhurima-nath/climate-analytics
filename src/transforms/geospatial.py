@@ -115,13 +115,10 @@ def process_carbon_flux_spatial(sources: dict, params: dict) -> DataFrame:
     # Note: Actual flux values would come from processing the raster files
     # For now, return tile coordinates as a placeholder for downstream processing
     result = df.select(
-        F.col("h3_cell").alias("h3_index"),  # Match column name with test expectations
+        "h3_cell",
         F.year(F.current_date()).alias("year"),  # Use current year as placeholder
-        F.lit(0.0).alias("flux_mg_co2e_ha"),  # Placeholder - would come from raster
-        F.lit("tile_metadata").alias("flux_type"),
-        "latitude",
-        "longitude",
-        F.current_date().cast("date").alias("date")
+        F.lit(0.0).alias("flux_value"),  # Placeholder - would come from raster
+        F.lit("tile_metadata").alias("flux_type")
     ).distinct()
     
-    return result.dropDuplicates(["h3_index", "date"])
+    return result.dropDuplicates(["h3_cell", "year"])

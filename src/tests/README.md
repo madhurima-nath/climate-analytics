@@ -247,6 +247,91 @@ pytest.main([
 ])
 ```
 
+## Sample Test Output
+
+Below is a sample output from a successful test run showing all validations passing:
+
+### Silver Table Validation (63 tests)
+```
+============================= 63 passed in 47.12s ==============================
+
+✅ Silver Table Validation tests PASSED!
+```
+
+### Audit Utils (5 tests)
+```
+test_audit_utils.py::test_audit_table_exists PASSED                      [ 20%]
+test_audit_utils.py::test_get_last_watermark_default PASSED              [ 40%]
+test_audit_utils.py::test_get_last_watermark_existing PASSED             [ 60%]
+test_audit_utils.py::test_update_audit_log_creates_record PASSED         [ 80%]
+test_audit_utils.py::test_audit_log_has_required_columns PASSED          [100%]
+
+============================== 5 passed in 6.75s ===============================
+
+✅ Audit Utils tests PASSED!
+```
+
+### Shared Logic (1 test)
+```
+======================================================================
+RUNNING SHARED LOGIC TESTS
+======================================================================
+
+test_shared_logic.py::test_calculate_thermal_stress PASSED               [100%]
+
+============================== 1 passed in 0.34s ===============================
+
+✅ Shared Logic tests PASSED!
+```
+
+### Test Suite Summary
+```
+======================================================================
+TEST SUITE SUMMARY
+======================================================================
+
+Test Suites Run: 3
+  ✅ Passed: 3
+  ❌ Failed: 0
+
+Detailed Results:
+  Silver Table Validation: ✅ PASSED
+  Audit Utils: ✅ PASSED
+  Shared Logic: ✅ PASSED
+
+Test Coverage:
+  1. ✅ Table Existence: All 10 silver tables exist
+  2. ✅ Table Population: Tables have data
+  3. ✅ Row Count Validation: Reasonable number of rows
+  4. ✅ Module Imports: All transforms and utilities import correctly
+  5. ✅ Null Checks: Key columns have no unexpected nulls
+  6. ✅ Unit Conversions: Temperature in Celsius (not Fahrenheit)
+  7. ✅ Thermal Stress: HDD/CDD calculations correct
+  8. ✅ Primary Key Deduplication: No duplicate keys
+  9. ✅ MERGE Logic: Audit log updated correctly
+  10. ✅ Geospatial Indexing: H3 functions work correctly
+  11. ✅ Data Quality: Year ranges, date ranges, completeness checks
+  12. ✅ Relational Normalisation: Wide-to-long unpivot works
+
+Validated Tables:
+   1. energy_metrics
+   2. weather_observations
+   3. weather_projections
+   4. weather_historical
+   5. dim_stations
+   6. dim_h3_grid
+   7. dim_date
+   8. dim_locations
+   9. carbon_flux_spatial
+  10. forest_inventory_annual
+
+======================================================================
+
+🎉 All tests passed successfully!
+```
+
+---
+
 ## Key Validations
 
 ### Unit Conversion Validation

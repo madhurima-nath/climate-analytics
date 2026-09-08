@@ -10,7 +10,7 @@
 │  Trigger:     Manual / DAB deploy                                │
 │  State:       Delta table watermarks                             │
 │  Spatial:     H3 Resolution 6 (~737 km²)                         │
-│  Testing:     pytest unit tests (45 tests)                       │
+│  Testing:     pytest unit tests (69 tests)                       │
 └────────────────────────────┬─────────────────────────────────────┘
                              │
                              │ Upgrade
@@ -46,9 +46,9 @@
 *   **Compute:** Serverless compute (auto-selected).
 *   **Ingestion:** DAB-orchestrated batch processing with watermark-based incremental loads.
 *   **Pipeline:** Job-based orchestration defined in `databricks.yml`:
-    *   `initialise_silver_infrastructure` (SQL task)
-    *   `run_silver_orchestrator` (notebook task)
-    *   `validate_silver_tables` (Python file task)
+    *   `silver_infrastructure_setup` (SQL task)
+    *   `silver_data_load` (notebook task)
+    *   `silver_validation` (notebook task)
 *   **Audit:** Delta table `climate_energy_demand.silver.ingestion_audit` tracks watermarks and row counts.
 *   **Logic:** H3 Resolution 6 to balance performance and regional precision.
 

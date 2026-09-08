@@ -42,7 +42,7 @@ Full Pipeline (chains all three for CI/CD):
 │ Creates:     │         │              │         │              │
 │ • ingestion_ │         │ Processes:   │         │ Checks:      │
 │   audit tbl  │         │ • 10 configs │         │ • Watermarks │
-└──────────────┘         │ • 10 tables  │         │ • 45 tests   │
+└──────────────┘         │ • 10 tables  │         │ • 69 tests   │
                          └──────────────┘         └──────────────┘
 ```
 

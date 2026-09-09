@@ -37,7 +37,8 @@ graph TD
 
 ## Implementation Logic
 ### Orchestrator
-The `silver_orchestrator.py` acts as the single entry point for the Silver-layer tables. This design ensures that logging, error handling, and data-writing protocols remain identical across the project, reducing technical debt and ensuring that every table meets the same quality standards.
+The `silver_orchestrator.py` serves as the centralised single execution engine the Silver-layer tables. 
+By decoupling the execution logic from the individual transformation scripts, this design ensures that logging, error handling, and data-writing protocols remain consistent across the project, thereby minimising technical debt and ensuring that every table adheres to the same stringent quality standards
 
 ### Declarative Configuration (YAML)
 Pipelines are defined using YAML files to separate the intent from the implementation.

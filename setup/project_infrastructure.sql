@@ -5,3 +5,6 @@ CREATE CATALOG IF NOT EXISTS climate_energy_demand;
 CREATE SCHEMA IF NOT EXISTS climate_energy_demand.bronze;
 CREATE SCHEMA IF NOT EXISTS climate_energy_demand.silver;
 CREATE SCHEMA IF NOT EXISTS climate_energy_demand.gold;
+
+-- Create monitoring tables
+CREATE SCHEMA IF NOT EXISTS climate_energy_demand.monitoring;

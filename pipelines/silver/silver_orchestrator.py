@@ -8,7 +8,9 @@ import os
 import sys
 import yaml
 import time
+import uuid
 import importlib
+from datetime import datetime
 
 # 1. Path Setup (Safe, no Spark calls)
 # -------------------------------------------------------------------------
@@ -33,7 +35,25 @@ except ImportError as e:
     print(f"Project Root Contents: {os.listdir(project_root)}")
     raise e
 
-# 5. Orchestration Function
+# 3. Helper for Run ID
+# -------------------------------------------------------------------------
+# On Serverless, spark.conf.get("spark.databricks.job.runId") is not accessible.
+# Instead, the job should pass the run ID as a task parameter using a dynamic
+# value reference: {"job_run_id": "{{job.run_id}}"} in the job's task parameters.
+# The widget provides a default empty value for interactive (non-job) runs.
+dbutils.widgets.text("job_run_id", "", "Job Run ID")
+
+def get_run_id():
+    """Retrieves the Databricks Job Run ID via widget parameter."""
+    try:
+        job_run_id = dbutils.widgets.get("job_run_id")
+        if job_run_id:
+            return f"job-{job_run_id}"
+    except Exception:
+        pass
+    return f"manual-{int(time.time())}"
+
+# 4. Orchestration Function
 # -------------------------------------------------------------------------
 def run_silver_orchestration():
     if not os.path.exists(CONFIG_DIR):
@@ -87,9 +107,10 @@ def run_silver_orchestration():
                 silver_df.write.format("delta").mode("overwrite").saveAsTable(target_table)
                 print(f"✅ Created {target_table} ({row_count:,} rows)")
             else:
-                silver_df.createOrReplaceTempView("v_updates")
+                view_name = f"v_updates_{uuid.uuid4().hex}"
+                silver_df.createOrReplaceTempView(view_name)
                 join_cond = " AND ".join([f"t.{k} = s.{k}" for k in cfg['merge_keys']])
-                spark.sql(f"MERGE INTO {target_table} t USING v_updates s ON {join_cond} WHEN MATCHED THEN UPDATE SET * WHEN NOT MATCHED THEN INSERT *")
+                spark.sql(f"MERGE INTO {target_table} t USING {view_name} s ON {join_cond} WHEN MATCHED THEN UPDATE SET * WHEN NOT MATCHED THEN INSERT *")
                 print(f"✅ Merged {target_table} ({row_count:,} rows)")
             
             completed += 1
@@ -114,6 +135,30 @@ def run_silver_orchestration():
     print(f"  ❌ Failed: {failed}")
     print(f"{'='*70}")
 
-# 6. Execution
+    # Log to Monitoring Table
+    try:
+        # We capture the run_id here
+        current_run_id = get_run_id()
+        
+        summary_data = [(
+            datetime.now(), 
+            'silver', 
+            total_configs, 
+            completed, 
+            skipped, 
+            failed, 
+            current_run_id
+        )]
+        
+        columns = ["run_timestamp", "layer", "total_configs", "completed", "skipped", "failed", "run_id"]
+        
+        summary_df = spark.createDataFrame(summary_data, columns)
+        summary_df.write.format("delta").mode("append").saveAsTable("climate_energy_demand.monitoring.orchestrator_summary")
+        print(f"✅ Summary logged with Run ID: {current_run_id}")
+        
+    except Exception as e:
+        print(f"❌ Failed to log monitoring summary: {e}")
+
+# 5. Execution
 # -------------------------------------------------------------------------
 run_silver_orchestration()

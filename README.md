@@ -23,6 +23,30 @@ Given the functional limitations of the *Databricks Free Tier*, the follwing ste
 - Pipeline Logging: Execution metadata—including notebook identity, run duration, and row counts—is persisted to a telemetry_audit Delta table.
 - Validation: Placeholder cells for schema enforcement and anomaly detection are integrated to maintain data provenance.
 
+## Job Execution & Prerequisites
+
+All jobs are defined in `databricks.yml` and deployed via Declarative Automation Bundles.
+
+### Prerequisite: Infrastructure Bootstrap (one-time)
+
+Run `project_bootstrap` **once** before any pipeline job. This creates the catalog, schemas, audit tables, and monitoring tables. It is idempotent (uses `IF NOT EXISTS`) but should not be re-run unless infrastructure changes are needed.
+
+### Pipeline Jobs
+
+Three options exist after bootstrap:
+
+| Job | What it does | When to use |
+| --- | --- | --- |
+| `climate_data_pipeline` | Chains: silver load → silver validate → gold load → gold validate | Full end-to-end run, CI/CD |
+| `silver_data_load` + `silver_validation` | Silver orchestrator only, then validation | When only bronze data changed |
+| `gold_data_load` + `gold_validation` | Gold orchestrator only, then validation | When re-running gold transforms |
+
+The modular jobs (`silver_data_load`, `gold_data_load`, etc.) are decoupled -- trigger each manually. The full pipeline chains everything with task dependencies so a single trigger runs all four steps in sequence.
+
+### Monitoring
+
+All job runs are tracked in `climate_energy_demand.monitoring` tables: `orchestrator_summary` (pipeline runs), `pipeline_runs` (bundle job status), `setup_status` (bootstrap verification), and `test_results` (validation outcomes). See `pipelines/consumption/monitoring/design_doc.md` for the dashboard build guide.
+
 ## Intelligence Layer (AI/BI & Genie)
 The final delivery layer leverages Databricks AI/BI Dashboards and the Genie semantic agent.
 - *Semantic Context*: The Gold layer includes version-controlled "Instructions" and metadata, enabling stakeholders to perform natural language inquiries (e.g. "Identify the five-year warming trend for coastal regions").

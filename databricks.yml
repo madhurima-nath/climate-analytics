@@ -8,20 +8,57 @@ variables:
 
 resources:
   jobs:
-    # === MODULAR SILVER LAYER JOBS ===
-    # Run independently or chain together as needed
-    
-    # Job 1: Infrastructure Setup (idempotent, safe to re-run)
-    silver_infrastructure_setup:
-      name: "Silver: Infrastructure Setup"
+    # === ONE-TIME BOOTSTRAP (run once before any pipeline) ===
+    # Creates catalog, schemas, audit tables, and monitoring tables.
+    # Idempotent (uses IF NOT EXISTS) but should only be run once at project init.
+    project_bootstrap:
+      name: "Project: Infrastructure Bootstrap"
       tasks:
-        - task_key: create_audit_table
+        - task_key: create_catalog_and_schemas
+          sql_task:
+            file:
+              path: "./setup/project_infrastructure.sql"
+            warehouse_id: "${var.warehouse_id}"
+
+        - task_key: create_monitoring_tables
+          depends_on:
+            - task_key: create_catalog_and_schemas
+          sql_task:
+            file:
+              path: "./pipelines/consumption/monitoring/setup.sql"
+            warehouse_id: "${var.warehouse_id}"
+
+        - task_key: create_silver_audit
+          depends_on:
+            - task_key: create_catalog_and_schemas
           sql_task:
             file:
               path: "./pipelines/silver/setup_silver.sql"
             warehouse_id: "${var.warehouse_id}"
 
-    # Job 2: Data Load (run when you have new/updated Bronze data)
+        - task_key: create_gold_audit
+          depends_on:
+            - task_key: create_catalog_and_schemas
+          sql_task:
+            file:
+              path: "./pipelines/gold/setup_gold.sql"
+            warehouse_id: "${var.warehouse_id}"
+
+        - task_key: verify_and_log
+          depends_on:
+            - task_key: create_monitoring_tables
+            - task_key: create_silver_audit
+            - task_key: create_gold_audit
+          sql_task:
+            file:
+              path: "./setup/verify_bootstrap.sql"
+            warehouse_id: "${var.warehouse_id}"
+
+    # === MODULAR SILVER LAYER JOBS ===
+    # Run independently or chain together as needed
+    # Requires: project_bootstrap has been run at least once
+
+    # Silver Data Load (run when you have new/updated Bronze data)
     silver_data_load:
       name: "Silver: Data Load"
       timeout_seconds: 0
@@ -32,8 +69,10 @@ resources:
         - task_key: run_orchestrator
           notebook_task:
             notebook_path: "./pipelines/silver/silver_orchestrator.py"
+            base_parameters:
+              job_run_id: "{{job.run_id}}"
 
-    # Job 3: Validation (run independently, checks for data changes)
+    # Silver Validation (run independently, checks for data changes)
     silver_validation:
       name: "Silver: Data Validation"
       tasks:
@@ -41,7 +80,34 @@ resources:
           notebook_task:
             notebook_path: "./src/tests/run_all_tests_notebook.py"
 
-    # === FULL PIPELINE (chains all three) ===
+    # === MODULAR GOLD LAYER JOBS ===
+    # Run independently or chain together as needed
+    # Requires: project_bootstrap has been run at least once
+
+    # Gold Data Load (run when silver data is updated)
+    gold_data_load:
+      name: "Gold: Data Load"
+      timeout_seconds: 0
+      max_concurrent_runs: 1
+      queue:
+        enabled: true
+      tasks:
+        - task_key: run_orchestrator
+          notebook_task:
+            notebook_path: "./pipelines/gold/gold_orchestrator.py"
+            base_parameters:
+              job_run_id: "{{job.run_id}}"
+
+    # Gold Validation (run independently, validates gold layer data quality)
+    gold_validation:
+      name: "Gold: Data Validation"
+      tasks:
+        - task_key: run_validation_tests
+          notebook_task:
+            notebook_path: "./src/tests/run_all_tests_notebook.py"
+
+    # === FULL PIPELINE (chains all layers end-to-end) ===
+    # Assumes project_bootstrap has already been run.
     # Use this for CI/CD or complete end-to-end runs
     climate_data_pipeline:
       name: "Climate Data Pipeline (Full)"
@@ -50,27 +116,32 @@ resources:
       queue:
         enabled: true
       tasks:
-        - task_key: setup_infrastructure
-          sql_task:
-            file:
-              path: "./pipelines/silver/setup_silver.sql"
-            warehouse_id: "${var.warehouse_id}"
-
         - task_key: load_silver_data
-          depends_on:
-            - task_key: setup_infrastructure
           notebook_task:
             notebook_path: "./pipelines/silver/silver_orchestrator.py"
+            base_parameters:
+              job_run_id: "{{job.run_id}}"
 
         - task_key: validate_silver_data
           depends_on:
             - task_key: load_silver_data
           notebook_task:
             notebook_path: "./src/tests/run_all_tests_notebook.py"
-          
-        # --- GOLD LAYER (ADD HERE LATER) ---
-        # You will add your Gold task below this line later. 
-        # It will 'depend_on' the validate_silver_data task.
+
+        # --- GOLD LAYER ---
+        - task_key: load_gold_data
+          depends_on:
+            - task_key: validate_silver_data
+          notebook_task:
+            notebook_path: "./pipelines/gold/gold_orchestrator.py"
+            base_parameters:
+              job_run_id: "{{job.run_id}}"
+
+        - task_key: validate_gold_data
+          depends_on:
+            - task_key: load_gold_data
+          notebook_task:
+            notebook_path: "./src/tests/run_all_tests_notebook.py"
 
 targets:
   dev:

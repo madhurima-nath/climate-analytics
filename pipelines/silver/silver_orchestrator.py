@@ -53,6 +53,64 @@ def get_run_id():
         pass
     return f"manual-{int(time.time())}"
 
+# 3b. Monitoring: Read layer/task_key, capture run_id, log run start
+# -------------------------------------------------------------------------
+# Use raw job_run_id for consistency with validation notebook (no "job-" prefix)
+try:
+    _orch_run_id = dbutils.widgets.get("job_run_id")
+    if not _orch_run_id:
+        _orch_run_id = f"manual-{int(time.time())}"
+except Exception:
+    _orch_run_id = f"manual-{int(time.time())}"
+
+try:
+    layer = dbutils.widgets.get("layer")
+except Exception:
+    layer = "silver"
+try:
+    task_key = dbutils.widgets.get("task_key")
+except Exception:
+    task_key = "run_orchestrator"
+try:
+    job_name = dbutils.widgets.get("job_name")
+except Exception:
+    job_name = "standalone"
+
+_orch_start_time = datetime.now()
+
+def _update_pipeline_run(status, error_message=None, duration_seconds=None,
+                          total_configs=None, completed=None, skipped=None, failed=None):
+    """MERGE final status into pipeline_runs for this run."""
+    set_parts = [f"status = '{status}'"]
+    if error_message is not None:
+        safe_msg = error_message.replace("'", "''")
+        set_parts.append(f"error_message = '{safe_msg}'")
+    if duration_seconds is not None:
+        set_parts.append(f"duration_seconds = {duration_seconds}")
+    if total_configs is not None:
+        set_parts.append(f"total_configs = {total_configs}")
+    if completed is not None:
+        set_parts.append(f"configs_completed = {completed}")
+    if skipped is not None:
+        set_parts.append(f"configs_skipped = {skipped}")
+    if failed is not None:
+        set_parts.append(f"configs_failed = {failed}")
+    set_clause = ", ".join(set_parts)
+    spark.sql(f"""
+        MERGE INTO climate_energy_demand.monitoring.pipeline_runs AS t
+        USING (SELECT '{_orch_run_id}' AS run_id, '{task_key}' AS task_key) AS s
+        ON t.run_id = s.run_id AND t.task_key = s.task_key
+        WHEN MATCHED THEN UPDATE SET {set_clause}
+    """)
+
+# INSERT "running" row into pipeline_runs
+spark.sql(f"""
+    INSERT INTO climate_energy_demand.monitoring.pipeline_runs
+    (run_timestamp, job_name, task_key, task_type, status, run_id, layer)
+    VALUES (TIMESTAMP '{_orch_start_time}', '{job_name}', '{task_key}', 'orchestration', 'running', '{_orch_run_id}', '{layer}')
+""")
+print(f"Monitoring: Logged run start (run_id={_orch_run_id}, layer={layer}, task_key={task_key})")
+
 # 4. Orchestration Function
 # -------------------------------------------------------------------------
 def run_silver_orchestration():
@@ -69,6 +127,9 @@ def run_silver_orchestration():
     completed = 0
     skipped = 0
     failed = 0
+    _detail_completed = []
+    _detail_skipped = []
+    _detail_failed = []
 
     for idx, config_file in enumerate(config_files, 1):
         config_path = os.path.join(CONFIG_DIR, config_file)
@@ -93,6 +154,7 @@ def run_silver_orchestration():
 
             if sources and all(df.isEmpty() for df in sources.values()):
                 print(f"✅ No new data. Skipping {target_table}")
+                _detail_skipped.append(f"{target_table} (no new data)")
                 skipped += 1
                 continue
 
@@ -113,6 +175,7 @@ def run_silver_orchestration():
                 spark.sql(f"MERGE INTO {target_table} t USING {view_name} s ON {join_cond} WHEN MATCHED THEN UPDATE SET * WHEN NOT MATCHED THEN INSERT *")
                 print(f"✅ Merged {target_table} ({row_count:,} rows)")
             
+            _detail_completed.append(f"{target_table} ({row_count:,} rows)")
             completed += 1
 
             # Audit (only if rows were processed)
@@ -125,6 +188,7 @@ def run_silver_orchestration():
 
         except Exception as e:
             print(f"❌ Failed {config_file}: {str(e)}")
+            _detail_failed.append(f"{config_file}: {str(e)}")
             failed += 1
             continue
     
@@ -135,29 +199,29 @@ def run_silver_orchestration():
     print(f"  ❌ Failed: {failed}")
     print(f"{'='*70}")
 
-    # Log to Monitoring Table
+    # Log to Monitoring Table (pipeline_runs)
     try:
-        # We capture the run_id here
-        current_run_id = get_run_id()
+        _orch_duration = int((datetime.now() - _orch_start_time).total_seconds())
+        _orch_status = "failed" if failed > 0 else "completed"
         
-        summary_data = [(
-            datetime.now(), 
-            'silver', 
-            total_configs, 
-            completed, 
-            skipped, 
-            failed, 
-            current_run_id
-        )]
+        # Build per-table summary for error_message (visible on dashboard)
+        _summary_parts = []
+        if _detail_completed:
+            _summary_parts.append("Completed: " + ", ".join(_detail_completed))
+        if _detail_skipped:
+            _summary_parts.append("Skipped: " + ", ".join(_detail_skipped))
+        if _detail_failed:
+            _summary_parts.append("Failed: " + ", ".join(_detail_failed))
+        _orch_summary = " | ".join(_summary_parts) if _summary_parts else "No tables processed"
         
-        columns = ["run_timestamp", "layer", "total_configs", "completed", "skipped", "failed", "run_id"]
-        
-        summary_df = spark.createDataFrame(summary_data, columns)
-        summary_df.write.format("delta").mode("append").saveAsTable("climate_energy_demand.monitoring.orchestrator_summary")
-        print(f"✅ Summary logged with Run ID: {current_run_id}")
+        _update_pipeline_run(_orch_status, error_message=_orch_summary,
+                            duration_seconds=_orch_duration,
+                            total_configs=total_configs, completed=completed,
+                            skipped=skipped, failed=failed)
+        print(f"Monitoring: Updated pipeline_runs (status={_orch_status}, run_id={_orch_run_id})")
         
     except Exception as e:
-        print(f"❌ Failed to log monitoring summary: {e}")
+        print(f"Failed to log monitoring: {e}")
 
 # 5. Execution
 # -------------------------------------------------------------------------

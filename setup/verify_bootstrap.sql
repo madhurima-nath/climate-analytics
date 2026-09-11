@@ -1,32 +1,24 @@
--- Bootstrap Verification: Check all infrastructure objects exist and log to monitoring
--- This runs as the final task in the project_bootstrap job.
+-- Bootstrap Verification: Check all infrastructure objects exist
+-- Infrastructure validation is now handled by test_infrastructure.py (runs via validation notebook)
+-- This SQL remains as a quick post-bootstrap sanity check.
 
--- Log schema verification
-INSERT INTO climate_energy_demand.monitoring.setup_status
-SELECT
-  current_timestamp() AS run_timestamp,
-  'schema' AS component,
-  'SCHEMA' AS object_type,
-  CONCAT(catalog_name, '.', schema_name) AS object_name,
-  'verified' AS status,
-  'bootstrap' AS run_id
+SELECT 'catalog' AS component, catalog_name AS object_name, 'OK' AS status
 FROM climate_energy_demand.information_schema.schemata
 WHERE catalog_name = 'climate_energy_demand'
-  AND schema_name IN ('bronze', 'silver', 'gold', 'monitoring');
+LIMIT 1;
 
--- Log table verification
-INSERT INTO climate_energy_demand.monitoring.setup_status
-SELECT
-  current_timestamp() AS run_timestamp,
-  'table' AS component,
-  'TABLE' AS object_type,
-  CONCAT(table_catalog, '.', table_schema, '.', table_name) AS object_name,
-  'verified' AS status,
-  'bootstrap' AS run_id
+SELECT 'schema' AS component, CONCAT(catalog_name, '.', schema_name) AS object_name, 'OK' AS status
+FROM climate_energy_demand.information_schema.schemata
+WHERE catalog_name = 'climate_energy_demand'
+  AND schema_name IN ('bronze', 'silver', 'gold', 'monitoring')
+ORDER BY schema_name;
+
+SELECT 'table' AS component, CONCAT(table_catalog, '.', table_schema, '.', table_name) AS object_name, 'OK' AS status
 FROM climate_energy_demand.information_schema.tables
 WHERE table_catalog = 'climate_energy_demand'
   AND (
     (table_schema = 'silver' AND table_name = 'ingestion_audit')
     OR (table_schema = 'gold' AND table_name = 'ingestion_audit')
-    OR (table_schema = 'monitoring' AND table_name IN ('orchestrator_summary', 'test_results', 'setup_status'))
-  );
+    OR (table_schema = 'monitoring' AND table_name IN ('pipeline_runs', 'test_results'))
+  )
+ORDER BY object_name;

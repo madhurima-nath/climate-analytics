@@ -54,6 +54,21 @@ resources:
               path: "./setup/verify_bootstrap.sql"
             warehouse_id: "${var.warehouse_id}"
 
+    # === MODULAR BRONZE LAYER JOB ===
+    # Bronze is manual (files uploaded to raw_uploads volume, then ingested via notebooks)
+    # This validation checks data existence, freshness (7-day threshold), and volume completeness.
+    bronze_validation:
+      name: "Bronze: Data Validation"
+      tasks:
+        - task_key: run_validation_tests
+          notebook_task:
+            notebook_path: "./src/tests/run_all_tests_notebook.py"
+            base_parameters:
+              job_run_id: "{{job.run_id}}"
+              job_name: "{{job.name}}"
+              layer: "bronze"
+              task_key: "run_validation_tests"
+
     # === MODULAR SILVER LAYER JOBS ===
     # Run independently or chain together as needed
     # Requires: project_bootstrap has been run at least once
@@ -71,6 +86,9 @@ resources:
             notebook_path: "./pipelines/silver/silver_orchestrator.py"
             base_parameters:
               job_run_id: "{{job.run_id}}"
+              job_name: "{{job.name}}"
+              layer: "silver"
+              task_key: "run_orchestrator"
 
     # Silver Validation (run independently, checks for data changes)
     silver_validation:
@@ -79,6 +97,11 @@ resources:
         - task_key: run_validation_tests
           notebook_task:
             notebook_path: "./src/tests/run_all_tests_notebook.py"
+            base_parameters:
+              job_run_id: "{{job.run_id}}"
+              job_name: "{{job.name}}"
+              layer: "silver"
+              task_key: "run_validation_tests"
 
     # === MODULAR GOLD LAYER JOBS ===
     # Run independently or chain together as needed
@@ -97,6 +120,9 @@ resources:
             notebook_path: "./pipelines/gold/gold_orchestrator.py"
             base_parameters:
               job_run_id: "{{job.run_id}}"
+              job_name: "{{job.name}}"
+              layer: "gold"
+              task_key: "run_orchestrator"
 
     # Gold Validation (run independently, validates gold layer data quality)
     gold_validation:
@@ -105,6 +131,11 @@ resources:
         - task_key: run_validation_tests
           notebook_task:
             notebook_path: "./src/tests/run_all_tests_notebook.py"
+            base_parameters:
+              job_run_id: "{{job.run_id}}"
+              job_name: "{{job.name}}"
+              layer: "gold"
+              task_key: "run_validation_tests"
 
     # === FULL PIPELINE (chains all layers end-to-end) ===
     # Assumes project_bootstrap has already been run.
@@ -116,17 +147,38 @@ resources:
       queue:
         enabled: true
       tasks:
+        - task_key: validate_bronze_data
+          notebook_task:
+            notebook_path: "./src/tests/run_all_tests_notebook.py"
+            base_parameters:
+              job_run_id: "{{job.run_id}}"
+              job_name: "{{job.name}}"
+              layer: "bronze"
+              task_key: "validate_bronze_data"
+          run_if: ALL_DONE  # Non-blocking: flag stale bronze without stopping the pipeline
+
         - task_key: load_silver_data
+          depends_on:
+            - task_key: validate_bronze_data
+          run_if: ALL_DONE  # Run even if bronze validation flags stale data
           notebook_task:
             notebook_path: "./pipelines/silver/silver_orchestrator.py"
             base_parameters:
               job_run_id: "{{job.run_id}}"
+              job_name: "{{job.name}}"
+              layer: "silver"
+              task_key: "load_silver_data"
 
         - task_key: validate_silver_data
           depends_on:
             - task_key: load_silver_data
           notebook_task:
             notebook_path: "./src/tests/run_all_tests_notebook.py"
+            base_parameters:
+              job_run_id: "{{job.run_id}}"
+              job_name: "{{job.name}}"
+              layer: "silver"
+              task_key: "validate_silver_data"
 
         # --- GOLD LAYER ---
         - task_key: load_gold_data
@@ -136,18 +188,24 @@ resources:
             notebook_path: "./pipelines/gold/gold_orchestrator.py"
             base_parameters:
               job_run_id: "{{job.run_id}}"
+              job_name: "{{job.name}}"
+              layer: "gold"
+              task_key: "load_gold_data"
 
         - task_key: validate_gold_data
           depends_on:
             - task_key: load_gold_data
           notebook_task:
             notebook_path: "./src/tests/run_all_tests_notebook.py"
+            base_parameters:
+              job_run_id: "{{job.run_id}}"
+              job_name: "{{job.name}}"
+              layer: "gold"
+              task_key: "validate_gold_data"
 
 targets:
   dev:
-    mode: development
-    default: true
     workspace:
-      host: https://dbc-48f6ffe7-ea99.cloud.databricks.com
+      host: "https://dbc-48f6ffe7-ea99.cloud.databricks.com"
     variables:
       warehouse_id: "051f30ffb9f184e5"

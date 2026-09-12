@@ -6,15 +6,25 @@ import pyspark.sql.functions as F
 from datetime import datetime
 from pyspark.sql.types import StructType, StructField, StringType, TimestampType, IntegerType
 
-# Finalised 3-level reference (Unity Catalog)
+# Module-level constant for default audit table
 AUDIT_TABLE = "climate_energy_demand.silver.ingestion_audit"
 
-def get_last_watermark(target_table_name: str):
-    # Get the session that is ALREADY running in the notebook
+def get_last_watermark(target_table_name: str, audit_schema: str = 'silver'):
+    """
+    Retrieve the last watermark timestamp for a table from the audit log.
+    
+    Args:
+        target_table_name: Name of the table to check
+        audit_schema: Schema where audit table lives ('silver' or 'gold'). Default: 'silver'
+    
+    Returns:
+        Timestamp of last successful processing, or epoch (1900-01-01) if none found
+    """
+    audit_table = f"climate_energy_demand.{audit_schema}.ingestion_audit"
     spark = SparkSession.getActiveSession()
     
     try:
-        res = spark.table(AUDIT_TABLE) \
+        res = spark.table(audit_table) \
                    .filter(F.col("table_name") == target_table_name) \
                    .select(F.max("last_watermark")).collect()[0][0]
         return res if res else datetime(1900, 1, 1)
@@ -22,7 +32,17 @@ def get_last_watermark(target_table_name: str):
         # If table doesn't exist yet, return the default epoch as timestamp
         return datetime(1900, 1, 1)
 
-def update_audit_log(table_name: str, watermark, count: int):
+def update_audit_log(table_name: str, watermark, count: int, audit_schema: str = 'silver'):
+    """
+    Record a successful processing run in the audit log.
+    
+    Args:
+        table_name: Name of the table processed
+        watermark: Last timestamp/value processed
+        count: Number of rows processed
+        audit_schema: Schema where audit table lives ('silver' or 'gold'). Default: 'silver'
+    """
+    audit_table = f"climate_energy_demand.{audit_schema}.ingestion_audit"
     spark = SparkSession.getActiveSession()
     
     # Convert string watermark to timestamp if needed
@@ -37,4 +57,4 @@ def update_audit_log(table_name: str, watermark, count: int):
         StructField("processed_at", TimestampType(), False)
     ])
     
-    spark.createDataFrame(data, schema).write.mode("append").saveAsTable(AUDIT_TABLE)
+    spark.createDataFrame(data, schema).write.mode("append").saveAsTable(audit_table)

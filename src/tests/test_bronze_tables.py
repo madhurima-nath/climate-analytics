@@ -102,7 +102,7 @@ def _full_name(table):
 # Test 1: Bronze tables exist and have data
 # ============================================================================
 
-def test_bronze_tables_exist():
+def test_bronze_tables_exist(spark):
     """All expected bronze tables exist in Unity Catalog."""
     missing = []
     for table in EXPECTED_TABLES:
@@ -111,7 +111,7 @@ def test_bronze_tables_exist():
     assert not missing, f"Missing bronze tables: {', '.join(missing)}"
 
 
-def test_bronze_tables_have_rows():
+def test_bronze_tables_have_rows(spark):
     """All main bronze tables have at least 1 row (not empty)."""
     empty = []
     for table in MAIN_TABLES:
@@ -128,7 +128,7 @@ def test_bronze_tables_have_rows():
 # Test 2: Data freshness (staleness within 7 days)
 # ============================================================================
 
-def test_bronze_data_freshness():
+def test_bronze_data_freshness(spark):
     """All main bronze tables were last written within the last 7 days."""
     threshold = datetime.now() - timedelta(days=STALENESS_THRESHOLD_DAYS)
     stale = []
@@ -155,7 +155,7 @@ def test_bronze_data_freshness():
 # Test 3: Volume file completeness (all raw files ingested to UC)
 # ============================================================================
 
-def test_volume_files_ingested():
+def test_volume_files_ingested(spark):
     """All CSV files in raw_uploads volume have corresponding bronze UC tables."""
     # List all files in the volume
     files_df = spark.sql(f"LIST '{VOLUME_PATH}'")

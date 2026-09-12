@@ -16,15 +16,7 @@ from src.common.shared_logic import calculate_thermal_stress, geospatial_indexin
 # FIXTURES
 # =============================================================================
 
-@pytest.fixture(scope="session")
-def spark_session():
-    """Get or create Spark session for tests."""
-    spark = SparkSession.getActiveSession()
-    if spark is None:
-        spark = SparkSession.builder \
-            .appName("SilverTableTests") \
-            .getOrCreate()
-    return spark
+# Spark fixture is now provided by conftest.py
 
 # =============================================================================
 # TABLE DEFINITIONS
@@ -79,29 +71,29 @@ MIN_ROW_COUNTS = {
 class TestTableExistence:
     """Test that all silver tables exist and have data."""
     
-    def test_audit_table_exists(self, spark_session):
+    def test_audit_table_exists(self, spark):
         """Verify the audit table exists."""
-        assert spark_session.catalog.tableExists(AUDIT_TABLE), \
+        assert spark.catalog.tableExists(AUDIT_TABLE), \
             f"Audit table {AUDIT_TABLE} does not exist"
     
     @pytest.mark.parametrize("table_name", EXPECTED_SILVER_TABLES)
-    def test_table_exists(self, spark_session, table_name):
+    def test_table_exists(self, spark, table_name):
         """Test that each silver table exists."""
-        assert spark_session.catalog.tableExists(table_name), \
+        assert spark.catalog.tableExists(table_name), \
             f"Silver table {table_name} does not exist"
     
     @pytest.mark.parametrize("table_name", EXPECTED_SILVER_TABLES)
-    def test_table_has_data(self, spark_session, table_name):
+    def test_table_has_data(self, spark, table_name):
         """Test that each silver table has data."""
-        df = spark_session.table(table_name)
+        df = spark.table(table_name)
         row_count = df.count()
         assert row_count > 0, \
             f"Silver table {table_name} exists but is empty"
     
     @pytest.mark.parametrize("table_name", EXPECTED_SILVER_TABLES)
-    def test_table_row_count_sane(self, spark_session, table_name):
+    def test_table_row_count_sane(self, spark, table_name):
         """Test that each table has a reasonable number of rows."""
-        df = spark_session.table(table_name)
+        df = spark.table(table_name)
         row_count = df.count()
         min_expected = MIN_ROW_COUNTS.get(table_name, 1)
         assert row_count >= min_expected, \
@@ -146,12 +138,12 @@ class TestNullValues:
     """Test that key columns don't have unexpected nulls."""
     
     @pytest.mark.parametrize("table_name", EXPECTED_SILVER_TABLES)
-    def test_no_nulls_in_key_columns(self, spark_session, table_name):
+    def test_no_nulls_in_key_columns(self, spark, table_name):
         """Test that key columns (PKs) have no null values."""
         if table_name not in KEY_COLUMNS:
             pytest.skip(f"No key columns defined for {table_name}")
         
-        df = spark_session.table(table_name)
+        df = spark.table(table_name)
         key_cols = KEY_COLUMNS[table_name]
         
         for key_col in key_cols:
@@ -167,14 +159,14 @@ class TestNullValues:
 class TestUnitConversions:
     """Test that unit conversions are correct."""
     
-    def test_temperature_conversion_weather_observations(self, spark_session):
+    def test_temperature_conversion_weather_observations(self, spark):
         """Test temperature is in Celsius (reasonable range)."""
         table_name = "climate_energy_demand.silver.weather_observations"
         
-        if not spark_session.catalog.tableExists(table_name):
+        if not spark.catalog.tableExists(table_name):
             pytest.skip(f"Table {table_name} does not exist")
         
-        df = spark_session.table(table_name)
+        df = spark.table(table_name)
         
         # Check if temp columns exist
         temp_cols = [c for c in df.columns if 'temp' in c.lower() or 'temperature' in c.lower()]
@@ -198,11 +190,11 @@ class TestUnitConversions:
             assert max_temp is None or max_temp <= 60, \
                 f"Maximum temperature {max_temp} seems too hot (possibly still in Fahrenheit?)"
     
-    def test_thermal_stress_calculation(self, spark_session):
+    def test_thermal_stress_calculation(self, spark):
         """Test thermal stress (HDD/CDD) calculation logic."""
         # Create test data
         test_data = [(10.0,), (15.0,), (25.0,), (30.0,)]
-        df = spark_session.createDataFrame(test_data, ["temp"])
+        df = spark.createDataFrame(test_data, ["temp"])
         
         # Apply thermal stress calculation
         result_df = calculate_thermal_stress(df, "temp")
@@ -224,12 +216,12 @@ class TestMergeAndDedup:
     """Test MERGE logic and deduplication behavior."""
     
     @pytest.mark.parametrize("table_name", EXPECTED_SILVER_TABLES)
-    def test_no_duplicate_primary_keys(self, spark_session, table_name):
+    def test_no_duplicate_primary_keys(self, spark, table_name):
         """Test that tables have no duplicate primary keys."""
         if table_name not in KEY_COLUMNS:
             pytest.skip(f"No key columns defined for {table_name}")
         
-        df = spark_session.table(table_name)
+        df = spark.table(table_name)
         key_cols = KEY_COLUMNS[table_name]
         
         # Count total rows
@@ -241,9 +233,9 @@ class TestMergeAndDedup:
         assert total_rows == distinct_keys, \
             f"Table {table_name} has {total_rows} rows but only {distinct_keys} distinct key combinations. Duplicates detected!"
     
-    def test_audit_log_updated(self, spark_session):
+    def test_audit_log_updated(self, spark):
         """Test that audit log is being updated for tables."""
-        audit_df = spark_session.table(AUDIT_TABLE)
+        audit_df = spark.table(AUDIT_TABLE)
         
         # Check that we have audit records
         audit_count = audit_df.count()
@@ -264,12 +256,12 @@ class TestMergeAndDedup:
 class TestGeospatialFunctions:
     """Test geospatial indexing functions."""
     
-    def test_h3_indexing(self, spark_session):
+    def test_h3_indexing(self, spark):
         """Test H3 geospatial indexing."""
         # Create test data with known coordinates
         # NYC: ~40.7N, -74.0W
         test_data = [(40.7, -74.0), (51.5, -0.1)]  # NYC and London
-        df = spark_session.createDataFrame(test_data, ["latitude", "longitude"])
+        df = spark.createDataFrame(test_data, ["latitude", "longitude"])
         
         # Apply H3 indexing
         result_df = geospatial_indexing(df, "latitude", "longitude")
@@ -280,14 +272,14 @@ class TestGeospatialFunctions:
         result_count = result_df.filter(col("h3_index_res6").isNotNull()).count()
         assert result_count == 2, "H3 indexing failed for some rows"
     
-    def test_h3_grid_table_populated(self, spark_session):
+    def test_h3_grid_table_populated(self, spark):
         """Test that H3 grid dimension table has valid indices."""
         table_name = "climate_energy_demand.silver.dim_h3_grid"
         
-        if not spark_session.catalog.tableExists(table_name):
+        if not spark.catalog.tableExists(table_name):
             pytest.skip(f"Table {table_name} does not exist")
         
-        df = spark_session.table(table_name)
+        df = spark.table(table_name)
         
         # Check that h3_index column exists and has no nulls
         assert "h3_cell" in df.columns, "h3_cell column not found in dim_h3_grid"
@@ -302,14 +294,14 @@ class TestGeospatialFunctions:
 class TestDataQuality:
     """Spot checks for data quality issues."""
     
-    def test_energy_metrics_year_range(self, spark_session):
+    def test_energy_metrics_year_range(self, spark):
         """Test that energy metrics are within expected year range."""
         table_name = "climate_energy_demand.silver.energy_metrics"
         
-        if not spark_session.catalog.tableExists(table_name):
+        if not spark.catalog.tableExists(table_name):
             pytest.skip(f"Table {table_name} does not exist")
         
-        df = spark_session.table(table_name)
+        df = spark.table(table_name)
         
         if "year" not in df.columns:
             pytest.skip("Year column not found")
@@ -327,14 +319,14 @@ class TestDataQuality:
         assert max_year <= 2100, f"Maximum year {max_year} seems unrealistic"
         assert min_year >= 2010, f"Minimum year {min_year} should be >= 2010 per config"
     
-    def test_weather_date_range(self, spark_session):
+    def test_weather_date_range(self, spark):
         """Test that weather observations have reasonable date ranges."""
         table_name = "climate_energy_demand.silver.weather_observations"
         
-        if not spark_session.catalog.tableExists(table_name):
+        if not spark.catalog.tableExists(table_name):
             pytest.skip(f"Table {table_name} does not exist")
         
-        df = spark_session.table(table_name)
+        df = spark.table(table_name)
         
         if "date" not in df.columns:
             pytest.skip("Date column not found")
@@ -352,14 +344,14 @@ class TestDataQuality:
         assert max_date is not None, "Maximum date is null"
         assert min_date < max_date, "Date range is invalid (min >= max)"
     
-    def test_dim_date_completeness(self, spark_session):
+    def test_dim_date_completeness(self, spark):
         """Test that date dimension has no gaps."""
         table_name = "climate_energy_demand.silver.dim_date"
         
-        if not spark_session.catalog.tableExists(table_name):
+        if not spark.catalog.tableExists(table_name):
             pytest.skip(f"Table {table_name} does not exist")
         
-        df = spark_session.table(table_name)
+        df = spark.table(table_name)
         
         if "date" not in df.columns:
             pytest.skip("Date column not found")
@@ -397,11 +389,11 @@ class TestDataQuality:
 class TestRelationalNormalisation:
     """Test the wide-to-long transformation logic."""
     
-    def test_unpivot_year_columns(self, spark_session):
+    def test_unpivot_year_columns(self, spark):
         """Test that wide format (y1990, y2000, etc.) is unpivoted correctly."""
         # Create test data in wide format
         test_data = [("USA", 100, 150, 200)]
-        df = spark_session.createDataFrame(test_data, ["country", "y1990", "y2000", "y2010"])
+        df = spark.createDataFrame(test_data, ["country", "y1990", "y2000", "y2010"])
         
         # Apply normalisation
         result_df = relational_normalisation(df, ["country"])

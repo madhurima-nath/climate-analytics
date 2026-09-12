@@ -5,20 +5,12 @@ import pytest
 from src.common.shared_logic import calculate_thermal_stress
 from pyspark.sql import SparkSession
 
-@pytest.fixture(scope="session")
-def spark_session():
-    """Get or create Spark session for tests."""
-    spark = SparkSession.getActiveSession()
-    if spark is None:
-        spark = SparkSession.builder \
-            .appName("SharedLogicTests") \
-            .getOrCreate()
-    return spark
+# Spark fixture is now provided by conftest.py
 
-def test_calculate_thermal_stress(spark_session):
+def test_calculate_thermal_stress(spark):
     # Mock data: 10C (Heating expected) and 30C (Cooling expected)
     data = [(10.0,), (30.0,)]
-    df = spark_session.createDataFrame(data, ["temp"])
+    df = spark.createDataFrame(data, ["temp"])
     
     result = calculate_thermal_stress(df, "temp").collect()
     

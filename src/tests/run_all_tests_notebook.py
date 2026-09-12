@@ -41,6 +41,8 @@ test_dir = setup_environment()
 # Captures every execution: full pipeline, child tasks, or manual runs
 # ============================================================================
 from datetime import datetime
+import uuid
+import re
 
 # Read job parameters (passed as base_parameters from job, defaults for manual runs)
 try:
@@ -62,13 +64,66 @@ try:
 except Exception:
     job_name = "standalone"
 
+# Generate unique execution_id for this test suite run
+execution_id = str(uuid.uuid4())
+
 # Record start time for duration calculation
 run_start_time = datetime.now()
+
+# Helper: Strip ANSI escape codes from text
+def strip_ansi(text):
+    """Remove ANSI color codes from text."""
+    ansi_escape = re.compile(r'\x1b\[[0-9;]*m')
+    return ansi_escape.sub('', text)
+
+# Helper: Parse pytest error message into components
+def parse_error(raw_error):
+    """
+    Parse pytest error message into clean components.
+    Returns: (error_type, error_message, error_file, error_line, stack_trace)
+    """
+    if not raw_error:
+        return (None, None, None, None, None)
+    
+    # Strip ANSI codes
+    clean_error = strip_ansi(raw_error)
+    
+    # Extract error type (e.g., NameError, AssertionError)
+    error_type = None
+    error_type_match = re.search(r'^([A-Z][a-zA-Z]*Error):', clean_error, re.MULTILINE)
+    if error_type_match:
+        error_type = error_type_match.group(1)
+    elif 'AssertionError:' in clean_error:
+        error_type = 'AssertionError'
+    
+    # Extract error message (first line after error type or assertion)
+    error_message = None
+    if error_type:
+        msg_match = re.search(rf'{error_type}:\s*(.+?)(?:\n|$)', clean_error)
+        if msg_match:
+            error_message = msg_match.group(1).strip()
+    if not error_message:
+        # Fallback: first non-empty line
+        lines = [l.strip() for l in clean_error.split('\n') if l.strip()]
+        error_message = lines[0] if lines else clean_error[:200]
+    
+    # Extract file and line number
+    error_file = None
+    error_line = None
+    file_match = re.search(r'([\w_]+\.py):(\d+):', clean_error)
+    if file_match:
+        error_file = file_match.group(1)
+        error_line = int(file_match.group(2))
+    
+    # Keep full clean stack trace
+    stack_trace = clean_error if len(clean_error) < 5000 else clean_error[:5000] + "...[truncated]"
+    
+    return (error_type, error_message, error_file, error_line, stack_trace)
 
 # Helper: update the pipeline_runs row for this run with final status
 def update_pipeline_run_status(status, error_message=None, duration_seconds=None):
     """MERGE final status into pipeline_runs for this run."""
-    set_parts = [f"status = '{status}'"]
+    set_parts = [f"status = '{status}'", f"test_execution_id = '{execution_id}'"]
     if error_message is not None:
         safe_msg = error_message.replace("'", "''")
         set_parts.append(f"error_message = '{safe_msg}'")
@@ -85,11 +140,11 @@ def update_pipeline_run_status(status, error_message=None, duration_seconds=None
 # INSERT a "running" row into pipeline_runs
 spark.sql(f"""
     INSERT INTO climate_energy_demand.monitoring.pipeline_runs
-    (run_timestamp, job_name, task_key, task_type, status, run_id, layer)
-    VALUES (TIMESTAMP '{run_start_time}', '{job_name}', '{task_key}', 'validation', 'running', '{job_run_id}', '{layer}')
+    (run_timestamp, job_name, task_key, task_type, status, run_id, layer, test_execution_id)
+    VALUES (TIMESTAMP '{run_start_time}', '{job_name}', '{task_key}', 'validation', 'running', '{job_run_id}', '{layer}', '{execution_id}')
 """)
 
-print(f"\U0001f4ca Monitoring: Logged run start (run_id={job_run_id}, layer={layer}, task_key={task_key})")
+print(f"\U0001f4ca Monitoring: Logged run start (execution_id={execution_id}, run_id={job_run_id}, layer={layer})")
 
 # COMMAND ----------
 
@@ -329,25 +384,76 @@ print(f"\n{'='*70}\n")
 # --- MONITORING: Write test results and update pipeline_runs ---
 duration = int((datetime.now() - run_start_time).total_seconds())
 
-# Write per-test results to test_results (individual test names + actual failure messages)
+# Write per-test results to test_results with clean parsed error details
 for suite_name, test_name, passed, fail_msg in all_test_details:
-    t_passed = 1 if passed else 0
-    t_failed = 0 if passed else 1
     t_status = "passed" if passed else "failed"
-    t_detail = fail_msg if not passed else ""
+    
+    # Parse error into clean components
+    if not passed and fail_msg:
+        error_type, error_message, error_file, error_line, stack_trace = parse_error(fail_msg)
+    else:
+        error_type, error_message, error_file, error_line, stack_trace = (None, None, None, None, None)
+    
+    # Escape single quotes for SQL
+    def sql_escape(val):
+        return val.replace("'", "''") if val else val
+    
+    # Extract test file from suite (e.g., "Bronze Table Validation" -> "test_bronze_tables.py")
+    test_file_map = {
+        "Infrastructure Validation": "test_infrastructure.py",
+        "Bronze Table Validation": "test_bronze_tables.py",
+        "Silver Table Validation": "test_silver_tables.py",
+        "Audit Utils": "test_audit_utils.py",
+        "Shared Logic": "test_shared_logic.py"
+    }
+    test_file = test_file_map.get(suite_name, "unknown.py")
+    
+    # Build INSERT with NULL for missing values
+    error_type_sql = f"'{sql_escape(error_type)}'" if error_type else "NULL"
+    error_message_sql = f"'{sql_escape(error_message)}'" if error_message else "NULL"
+    error_file_sql = f"'{sql_escape(error_file)}'" if error_file else "NULL"
+    error_line_sql = str(error_line) if error_line else "NULL"
+    stack_trace_sql = f"'{sql_escape(stack_trace)}'" if stack_trace else "NULL"
+    
     spark.sql(f"""
         INSERT INTO climate_energy_demand.monitoring.test_results
-        (run_timestamp, layer, suite_name, category, status, tests_passed, tests_failed, failure_message, run_id)
-        VALUES (TIMESTAMP '{datetime.now()}', '{layer}', '{suite_name.replace(chr(39), chr(39)+chr(39))}', '{test_name.replace(chr(39), chr(39)+chr(39))}', '{t_status}', {t_passed}, {t_failed}, '{t_detail.replace(chr(39), chr(39)+chr(39))}', '{job_run_id}')
+        (execution_id, run_id, run_timestamp, suite_name, test_name, test_file, layer, status, 
+         duration_ms, error_type, error_message, error_file, error_line, stack_trace)
+        VALUES (
+            '{execution_id}',
+            '{job_run_id}',
+            TIMESTAMP '{datetime.now()}',
+            '{sql_escape(suite_name)}',
+            '{sql_escape(test_name)}',
+            '{test_file}',
+            '{layer}',
+            '{t_status}',
+            NULL,
+            {error_type_sql},
+            {error_message_sql},
+            {error_file_sql},
+            {error_line_sql},
+            {stack_trace_sql}
+        )
     """)
 
-# Update pipeline_runs with final status
+# Update pipeline_runs with final status and link to test_execution_id
 if failed_suites > 0:
-    failure_details = []
+    failure_summary = []
     for suite_name, test_name, passed, fail_msg in all_test_details:
         if not passed:
-            failure_details.append(f"{test_name}: {fail_msg}")
-    error_detail = " | ".join(failure_details)
+            # Clean error message for summary
+            _, clean_msg, _, _, _ = parse_error(fail_msg)
+            summary = f"{test_name}: {clean_msg if clean_msg else 'Failed'}"
+            failure_summary.append(summary)
+    
+    # Join all failures (full details are in test_results table)
+    error_detail = " | ".join(failure_summary)
+    
+    # Truncate only if extremely long (keep it reasonable for pipeline_runs summary)
+    if len(error_detail) > 8000:
+        error_detail = error_detail[:8000] + "... [see test_results table for full details]"
+    
     if layer == "bronze":
         # Bronze staleness is a flag, not a failure — task succeeds, details in monitoring
         update_pipeline_run_status("completed", error_message=error_detail, duration_seconds=duration)
@@ -356,7 +462,7 @@ if failed_suites > 0:
 else:
     update_pipeline_run_status("completed", duration_seconds=duration)
 
-print(f"Monitoring: Logged {len(all_test_details)} test results to test_results and updated pipeline_runs")
+print(f"Monitoring: Logged {len(all_test_details)} test results to test_results (execution_id={execution_id}) and updated pipeline_runs")
 
 # Raise exception if any tests failed (will cause job to fail)
 # Bronze is non-blocking — staleness flags in monitoring but task succeeds

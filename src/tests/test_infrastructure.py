@@ -28,23 +28,23 @@ def _full_name(schema_table):
     return f"{CATALOG}.{schema_table}"
 
 
-def test_catalog_exists():
+def test_catalog_exists(spark):
     """The main Unity Catalog catalog exists."""
-    catalogs = [row.catalog_name for row in spark.sql("SHOW CATALOGS").collect()]
+    catalogs = [row.catalog for row in spark.sql("SHOW CATALOGS").collect()]
     assert CATALOG in catalogs, f"Catalog '{CATALOG}' not found. Available: {', '.join(catalogs)}"
 
 
-def test_schemas_exist():
+def test_schemas_exist(spark):
     """All required schemas exist within the catalog."""
     existing = set()
     df = spark.sql(f"SHOW SCHEMAS IN {CATALOG}")
     for row in df.collect():
-        existing.add(row.schema_name)
+        existing.add(row.databaseName)
     missing = [s for s in REQUIRED_SCHEMAS if s not in existing]
     assert not missing, f"Missing schemas in {CATALOG}: {', '.join(missing)}"
 
 
-def test_required_tables_exist():
+def test_required_tables_exist(spark):
     """All required infrastructure tables exist."""
     missing = []
     for schema_table in REQUIRED_TABLES:
@@ -54,7 +54,7 @@ def test_required_tables_exist():
     assert not missing, f"Missing tables: {', '.join(missing)}"
 
 
-def test_required_volumes_exist():
+def test_required_volumes_exist(spark):
     """All required UC volumes exist."""
     missing = []
     for schema_volume in REQUIRED_VOLUMES:
@@ -69,7 +69,7 @@ def test_required_volumes_exist():
     assert not missing, f"Missing volumes: {', '.join(missing)}"
 
 
-def test_pipeline_runs_has_orchestrator_columns():
+def test_pipeline_runs_has_orchestrator_columns(spark):
     """pipeline_runs table has the merged orchestrator columns."""
     columns = [f.name for f in spark.table(f"{CATALOG}.monitoring.pipeline_runs").schema.fields]
     expected = ["layer", "total_configs", "configs_completed", "configs_skipped", "configs_failed"]

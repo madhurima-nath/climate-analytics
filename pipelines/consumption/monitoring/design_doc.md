@@ -319,11 +319,95 @@ ORDER BY days_since_last_run DESC;
 
 ---
 
+### Page 5: Layer Summary Grid (Implemented in Lakeview)
+
+**Dashboard Name**: Climate Analysis - Pipeline Monitoring
+
+**Status**: ✅ Implemented and rendering
+
+#### Datasets
+
+**ds_latest_pipeline_run** — Latest pipeline run per layer + task_type:
+
+```sql
+WITH ranked_runs AS (
+  SELECT
+    run_timestamp, job_name, layer, task_type, status, duration_seconds,
+    total_configs, configs_completed, configs_skipped, configs_failed,
+    error_message AS per_table_details,
+    ROW_NUMBER() OVER (PARTITION BY layer, task_type ORDER BY run_timestamp DESC) as rn
+  FROM climate_energy_demand.monitoring.pipeline_runs
+)
+SELECT
+  run_timestamp, job_name, layer, task_type, status, duration_seconds,
+  total_configs, configs_completed, configs_skipped, configs_failed,
+  per_table_details
+FROM ranked_runs
+WHERE rn = 1
+ORDER BY run_timestamp DESC;
+```
+
+**ds_latest_test_results** — Latest test suite execution with stakeholder-friendly presentation (test names human-readable via INITCAP/REPLACE, status as pass/fail icons, error_type inferred from error_message when NULL for failed tests, details summarized not verbatim). Full SQL in dashboard dataset `datasets/766c9ff9`.
+
+**ds_data_freshness** — Table watermarks from `silver.ingestion_audit` (available, not yet wired to widgets)
+
+#### Canvas Layout — 3-Column Grid
+
+No top filter bar. All three layers display simultaneously in side-by-side columns.
+
+**Row 0**: Layer headers (text widgets) — Bronze (col 0), Silver (col 4), Gold (col 8), each w4.
+
+**Rows 1-3**: Run Info (table widgets from `ds_latest_pipeline_run`) — each shows task_type, status, run_timestamp, duration_seconds, configs_completed, configs_skipped, configs_failed, filtered to the column's layer.
+
+**Rows 4-7**: Per-Table Details (Silver and Gold only) — shows per_table_details (orchestration outcome string). Bronze omits this section because it is validation-only.
+
+**Rows 4-11**: Bronze Validation (expanded to fill space, height 8) — test results from `ds_latest_test_results`, filtered to bronze.
+
+**Rows 8-11**: Silver Validation, Gold Validation — test results from `ds_latest_test_results`, filtered to each layer. Columns: Validation, Result, Error Type, Details.
+
+#### Presentation Rules
+
+1. Column headers properly capitalized (Validation, Result, Error Type, Details) — no raw SQL field names
+2. Test names human-readable via INITCAP + REPLACE (e.g., "Schemas Exist" not "test_schemas_exist"). Specific overrides for unclear names (e.g., "Orchestrator Tracking Columns" for test_pipeline_runs_has_orchestrator_columns)
+3. Status shown as pass/fail icons — not raw "passed"/"failed"
+4. Error Type uses source error_type when available; infers from error message pattern when NULL for failed tests (AttributeError, AssertionError, KeyError, ValueError, TypeError, fallback "Error"); "N/A" for passing tests
+5. Details are short summaries — extracts description before colon for stale-tables errors, uses descriptive summary for schema errors, truncates unknown errors to 80 chars with ellipsis. "N/A" for passing tests. Never displays raw verbatim error messages.
+
+#### Widget-Scoped Filters
+
+Each widget filters by layer using widget-scoped predicates (no page-level filter): Bronze widgets `layer IN ('bronze')`, Silver widgets `layer IN ('silver')`, Gold widgets `layer IN ('gold')`.
+
+#### Current Data State
+
+- **Bronze** — 1 run (validation, completed, 91s). 9 test results: 7 pass, 2 fail (Bronze Data Freshness / Schemas Exist). Config counts NULL (validation task, no orchestration).
+- **Silver** — 1 run (validation, completed). Per-table details NULL. 0 test results in latest execution.
+- **Gold** — 0 rows (no gold layer pipeline runs logged yet).
+
+#### Streamlit Note
+
+The Layer Summary Grid must be replicated in the Streamlit app. See the Streamlit section below for replication requirements.
+   - Displays: "🟢 Bronze Layer" / "🟢 Silver Layer" / "🟢 Gold Layer"
+
+
+
+
+
+
+#### Current Data State
+
+- **Bronze** — ✅ 1 row, status "completed", per_table_details populated
+- **Silver** — ✅ 1 row, status "completed", per_table_details NULL
+- **Gold** — 🔲 0 rows (no gold layer pipeline runs logged yet)
+
+---
+
 ## Streamlit Dashboard: External Access
 
 ### Purpose
 
 Provide external stakeholders (non-Databricks users) with read-only access to pipeline monitoring.
+
+> **⚠️ Replication Requirement**: The entire Lakeview dashboard design — including the Layer Summary Grid (3-column layout, header badges, run info, per-table details, validation tables with human-readable test names and summarized error details), all datasets (`ds_latest_pipeline_run`, `ds_latest_test_results`, `ds_data_freshness`), and all SQL queries — must be replicated in this Streamlit app. External stakeholders should see the same information and layout as the Lakeview dashboard.
 
 ### Architecture
 
@@ -468,7 +552,7 @@ WHERE layer = 'gold'  -- Just add this filter
 
 ### Ready to Build 🔲
 
-- Lakeview Dashboard (all queries documented)
+- Lakeview Dashboard (Page 5: Layer Summary Grid implemented; Pages 1-4 documented, not yet built)
 - Streamlit App (external access)
 - Gold orchestrator logging (when gold layer complete)
 - Genie space (natural language Q&A)

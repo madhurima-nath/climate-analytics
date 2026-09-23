@@ -29,8 +29,6 @@ watermark_column: "ingested_at"
 merge_keys:
   - "country"
   - "date"
-  - "latitude"
-  - "longitude"
 
 # =============================================================================
 # PARAMETERS (Scientific Thresholds)

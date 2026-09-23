@@ -49,7 +49,7 @@ EXPECTED_TABLES = [
     "owid_energy",
 ]
 
-# Main data tables (subject to freshness checks - exclude small lookup/code tables)
+# Main data tables (exclude small lookup/code tables)
 MAIN_TABLES = [
     "fao_land_cover_all_data",
     "fao_land_use_all_data",
@@ -62,6 +62,12 @@ MAIN_TABLES = [
     "openmeteo_climate_cmip6_projections",
     "openmeteo_weather",
     "owid_energy",
+]
+
+# Incrementally-loaded tables (subject to freshness checks)
+# All other bronze tables are one-time bulk loads and should NOT be checked for staleness
+INCREMENTAL_TABLES = [
+    "openmeteo_weather",
 ]
 
 # Mapping: volume CSV files -> bronze table names
@@ -129,10 +135,14 @@ def test_bronze_tables_have_rows(spark):
 # ============================================================================
 
 def test_bronze_data_freshness(spark):
-    """All main bronze tables were last written within the last 7 days."""
+    """Incrementally-loaded bronze tables were last written within the last 7 days.
+
+    Only openmeteo_weather is incrementally loaded; all other bronze tables are
+    one-time bulk loads and are not subject to staleness checks.
+    """
     threshold = datetime.now() - timedelta(days=STALENESS_THRESHOLD_DAYS)
     stale = []
-    for table in MAIN_TABLES:
+    for table in INCREMENTAL_TABLES:
         try:
             history = spark.sql(f"DESCRIBE HISTORY {_full_name(table)} LIMIT 1")
             last_write = history.collect()[0]["timestamp"]

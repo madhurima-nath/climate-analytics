@@ -24,18 +24,6 @@ def relational_normalisation(df: DataFrame, id_columns: list) -> DataFrame:
         F.substring(F.col("observation_year"), 2, 4).cast("int")
     )
 
-def geospatial_indexing(df: DataFrame, lat_col: str, lon_col: str) -> DataFrame:
-    """
-    Maps coordinates to Uber H3 Hexagons.
-    2026 UPDATE: Using native h3_longlatash3 for memory efficiency on Serverless.
-    """
-    # We use the built-in h3 function instead of a Python UDF
-    # Resolution 6 (as requested)
-    return df.withColumn(
-        "h3_index_res6", 
-        F.expr(f"h3_longlatash3({lon_col}, {lat_col}, 6)")
-    )
-
 def calculate_thermal_stress(df: DataFrame, temp_col: str) -> DataFrame:
     """Calculates Heating (Base 15C) and Cooling (Base 25C) degree days."""
     return df.withColumn("heating_degree_days", F.greatest(F.lit(0), F.lit(15) - F.col(temp_col))) \

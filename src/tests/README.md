@@ -8,32 +8,25 @@ Comprehensive test suite for validating the Climate Energy Demand silver layer t
 
 ### Issues Discovered (September 6, 2026)
 
-#### 1. Empty Table
-- **Table:** `carbon_flux_spatial`
-- **Issue:** Table exists but contains 0 rows
-- **Impact:** Missing critical carbon flux measurements
-- **Root Cause:** Transform in `geospatial.py` not loading data or source data missing
-- **Status:** Fixed ✅
-
-#### 2. Null Primary Key Values
+#### 1. Null Primary Key Values
 - **Table:** `energy_metrics`
 - **Issue:** 1,201 null values in `iso_code` column (primary key)
 - **Impact:** Cannot uniquely identify records, breaks referential integrity
 - **Root Cause:** Bronze data has records without country codes, no null handling in transform
 - **Status:** Fixed ✅
 
-#### 3. Invalid Temperature Data
+#### 2. Invalid Temperature Data
 - **Table:** `weather_observations`
 - **Issue:** Maximum temperature of 5,537.72°C (should be ≤60°C)
 - **Impact:** Thermal stress calculations completely wrong, unusable for analysis
 - **Root Cause:** Temperature conversion error - likely mixed Kelvin/Celsius or missing conversion
 - **Status:** Fixed ✅
 
-#### 4. Duplicate Primary Keys (9 Tables Affected)
+#### 3. Duplicate Primary Keys (9 Tables Affected)
 - **Tables:**
   - `energy_metrics`: 4,568 rows but only 3,383 distinct keys (1,185 duplicates)
   - `weather_observations`: 178,338 rows but only 175,487 distinct keys (2,851 duplicates)
-  - `weather_projections`, `weather_historical`, `dim_h3_grid`, `dim_locations`, `carbon_flux_spatial`, `forest_inventory_annual`
+  - `weather_projections`, `weather_historical`, `dim_locations`, `forest_inventory_annual`
 - **Issue:** MERGE statements not properly deduplicating on primary keys
 - **Impact:** Duplicate records corrupt aggregations, inflate counts
 - **Root Cause:** Missing `DISTINCT` in source CTEs before MERGE, or improper merge keys
@@ -89,8 +82,8 @@ Comprehensive test suite for validating the Climate Energy Demand silver layer t
                  │_tables.py │ │_utils.py  │ │_logic.py  │
                  │           │ │           │ │           │
                  │• Tables   │ │• Watermark│ │• Thermal  │
-                 │• Data     │ │• Audit log│ │• H3 index │
-                 │• Quality  │ │           │ │• Unpivot  │
+                 │• Data     │ │• Audit log│ │• Unpivot  │
+                 │• Quality  │ │           │ │           │
                  └─────┬─────┘ └─────┬─────┘ └─────┬─────┘
                        │             │             │
                        └─────────────┼─────────────┘
@@ -128,7 +121,7 @@ This test suite provides **intelligent, incremental validation** that only runs 
 * 🔧 **Force-Run Option**: Can force validation by deleting metadata row
 
 ### What It Validates
-- ✅ **Table Existence**: All 10 silver tables exist
+- ✅ **Table Existence**: All 8 silver tables exist
 - ✅ **Table Population**: Tables contain data with reasonable row counts
 - ✅ **Module Imports**: All transform and utility modules load correctly
 - ✅ **Null Checks**: Key columns (primary keys) have no unexpected nulls
@@ -136,7 +129,6 @@ This test suite provides **intelligent, incremental validation** that only runs 
 - ✅ **Thermal Stress Calculations**: HDD/CDD logic (base 15°C heating, 25°C cooling)
 - ✅ **Deduplication**: No duplicate primary key combinations
 - ✅ **MERGE Logic**: Audit watermarking is functioning
-- ✅ **Geospatial Indexing**: H3 hexagon indexing at resolution 6
 - ✅ **Data Quality**: Year ranges (≥2010), date continuity, dimension completeness
 - ✅ **Relational Normalisation**: Wide-to-long format transformation (y1990 → observation_year)
 
@@ -144,7 +136,7 @@ This test suite provides **intelligent, incremental validation** that only runs 
 
 ### 1. `test_silver_tables.py` (Main Test Suite)
 
-Comprehensive validation of all 10 silver tables:
+Comprehensive validation of all 8 silver tables:
 
 **Tables Tested:**
 1. `energy_metrics` - National energy demand, generation, GDP, population
@@ -152,11 +144,9 @@ Comprehensive validation of all 10 silver tables:
 3. `weather_projections` - Climate model forecasts
 4. `weather_historical` - Historical weather reconstructions
 5. `dim_stations` - Station metadata dimension
-6. `dim_h3_grid` - H3 hexagonal grid spatial dimension
-7. `dim_date` - Date dimension calendar
-8. `dim_locations` - Country/location dimension
-9. `carbon_flux_spatial` - Carbon flux spatial measurements
-10. `forest_inventory_annual` - Annual forest inventory data
+6. `dim_date` - Date dimension calendar
+7. `dim_locations` - Country/location dimension
+8. `forest_inventory_annual` - Annual forest inventory data
 
 **Test Classes:**
 - `TestTableExistence` - Verify all tables exist and have data
@@ -164,7 +154,6 @@ Comprehensive validation of all 10 silver tables:
 - `TestNullValues` - Check for unexpected nulls in key columns
 - `TestUnitConversions` - Verify temperature conversions and thermal stress calculations
 - `TestMergeAndDedup` - Validate MERGE logic and primary key uniqueness
-- `TestGeospatialFunctions` - Test H3 geospatial indexing
 - `TestDataQuality` - Spot checks for year ranges, dates, dimension completeness
 - `TestRelationalNormalisation` - Test wide-to-long unpivot transformation
 
@@ -181,7 +170,6 @@ Tests for watermark and audit logging functionality:
 
 Tests for common transformation logic:
 - `calculate_thermal_stress()` - Heating/Cooling degree days
-- `geospatial_indexing()` - H3 hexagon assignment
 - `relational_normalisation()` - Wide-to-long pivot
 
 ## Running Tests
@@ -300,7 +288,7 @@ Detailed Results:
   Shared Logic: ✅ PASSED
 
 Test Coverage:
-  1. ✅ Table Existence: All 10 silver tables exist
+  1. ✅ Table Existence: All 8 silver tables exist
   2. ✅ Table Population: Tables have data
   3. ✅ Row Count Validation: Reasonable number of rows
   4. ✅ Module Imports: All transforms and utilities import correctly
@@ -309,9 +297,8 @@ Test Coverage:
   7. ✅ Thermal Stress: HDD/CDD calculations correct
   8. ✅ Primary Key Deduplication: No duplicate keys
   9. ✅ MERGE Logic: Audit log updated correctly
-  10. ✅ Geospatial Indexing: H3 functions work correctly
-  11. ✅ Data Quality: Year ranges, date ranges, completeness checks
-  12. ✅ Relational Normalisation: Wide-to-long unpivot works
+  10. ✅ Data Quality: Year ranges, date ranges, completeness checks
+  11. ✅ Relational Normalisation: Wide-to-long unpivot works
 
 Validated Tables:
    1. energy_metrics
@@ -319,11 +306,9 @@ Validated Tables:
    3. weather_projections
    4. weather_historical
    5. dim_stations
-   6. dim_h3_grid
-   7. dim_date
-   8. dim_locations
-   9. carbon_flux_spatial
-  10. forest_inventory_annual
+   6. dim_date
+   7. dim_locations
+   8. forest_inventory_annual
 
 ======================================================================
 
@@ -378,13 +363,6 @@ max_year <= 2100 (sanity check) ✓
 - Calculates expected number of days in date range
 - Verifies at least 95% of dates are present (allows small gaps)
 - Ensures no large gaps in calendar dimension
-
-### Geospatial Validation
-
-**H3 Indexing:**
-- Tests H3 resolution 6 hexagon assignment
-- Validates known coordinates (NYC: 40.7N, -74.0W)
-- Checks `dim_h3_grid` has no null H3 indices
 
 ## Interpreting Results
 

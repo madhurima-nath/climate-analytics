@@ -14,7 +14,7 @@ SCHEMA = "bronze"
 VOLUME_PATH = f"/Volumes/{CATALOG}/{SCHEMA}/raw_uploads"
 STALENESS_THRESHOLD_DAYS = 7
 
-# All 25 expected bronze tables
+# All 21 expected bronze tables
 EXPECTED_TABLES = [
     # FAO Land Cover (6 tables)
     "fao_land_cover_all_data",
@@ -36,11 +36,6 @@ EXPECTED_TABLES = [
     "fao_temp_change_data_noflag",
     "fao_temp_change_elements",
     "fao_temp_change_flags",
-    # GFW Forest (4 tables)
-    "gfw_emissions_polygons",
-    "gfw_net_flux",
-    "gfw_peatlands",
-    "gfw_tropical_tree_cover",
     # API-ingested (3 tables - no volume files)
     "noaa_gsod",
     "openmeteo_climate_cmip6_projections",
@@ -54,10 +49,6 @@ MAIN_TABLES = [
     "fao_land_cover_all_data",
     "fao_land_use_all_data",
     "fao_temp_change_all_data",
-    "gfw_emissions_polygons",
-    "gfw_net_flux",
-    "gfw_peatlands",
-    "gfw_tropical_tree_cover",
     "noaa_gsod",
     "openmeteo_climate_cmip6_projections",
     "openmeteo_weather",
@@ -85,16 +76,12 @@ FILE_TO_TABLE = {
     "Environment_Temperature_change_AreaCodes.csv": "fao_temp_change_area_codes",
     "Environment_Temperature_change_Elements.csv": "fao_temp_change_elements",
     "Environment_Temperature_change_Flags.csv": "fao_temp_change_flags",
-    "Forest_greenhouse_gas_emissions_polygons.csv": "gfw_emissions_polygons",
-    "Forest_greenhouse_gas_net_flux.csv": "gfw_net_flux",
-    "Global_Peatlands.csv": "gfw_peatlands",
     "Inputs_LandUse_All_Data.csv": "fao_land_use_all_data",
     "Inputs_LandUse_All_Data_NOFLAG.csv": "fao_land_use_data_noflag",
     "Inputs_LandUse_AreaCodes.csv": "fao_land_use_area_codes",
     "Inputs_LandUse_Elements.csv": "fao_land_use_elements",
     "Inputs_LandUse_Flags.csv": "fao_land_use_flags",
     "Inputs_LandUse_ItemCodes.csv": "fao_land_use_item_codes",
-    "Tropical_Tree_Cover.csv": "gfw_tropical_tree_cover",
     "owid-energy-data.csv": "owid_energy",
     "reference_locations.csv": None,  # Reference file, no bronze table needed
 }

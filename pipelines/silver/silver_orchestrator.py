@@ -140,6 +140,12 @@ def run_silver_orchestration():
             with open(config_path, 'r') as f:
                 cfg = yaml.safe_load(f)
             
+            if not cfg:
+                print(f"⏭️  Skipping empty config: {config_file}")
+                _detail_skipped.append(f"{config_file} (empty)")
+                skipped += 1
+                continue
+            
             target_table = cfg['target_table']
             last_ts = get_last_watermark(target_table)
             

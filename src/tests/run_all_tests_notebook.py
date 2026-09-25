@@ -357,7 +357,7 @@ for suite_name, exit_code in results.items():
     print(f"  {suite_name}: {status}")
 
 print("\nTest Coverage:")
-print("""  1. ✅ Table Existence: All 10 silver tables exist
+print("""  1. ✅ Table Existence: All 8 silver tables exist
   2. ✅ Table Population: Tables have data
   3. ✅ Row Count Validation: Reasonable number of rows
   4. ✅ Module Imports: All transforms and utilities import correctly
@@ -366,15 +366,14 @@ print("""  1. ✅ Table Existence: All 10 silver tables exist
   7. ✅ Thermal Stress: HDD/CDD calculations correct
   8. ✅ Primary Key Deduplication: No duplicate keys
   9. ✅ MERGE Logic: Audit log updated correctly
-  10. ✅ Geospatial Indexing: H3 functions work correctly
-  11. ✅ Data Quality: Year ranges, date ranges, completeness checks
-  12. ✅ Relational Normalisation: Wide-to-long unpivot works""")
+  10. ✅ Data Quality: Year ranges, date ranges, completeness checks
+  11. ✅ Relational Normalisation: Wide-to-long unpivot works""")
 
 print("\nValidated Tables:")
 tables = [
     "energy_metrics", "weather_observations", "weather_projections",
-    "weather_historical", "dim_stations", "dim_h3_grid", "dim_date",
-    "dim_locations", "carbon_flux_spatial", "forest_inventory_annual"
+    "weather_historical", "dim_stations", "dim_date",
+    "dim_locations", "forest_inventory_annual"
 ]
 for i, table in enumerate(tables, 1):
     print(f"  {i:2d}. {table}")

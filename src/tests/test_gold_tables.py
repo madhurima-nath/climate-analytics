@@ -31,7 +31,7 @@ EXPECTED_GOLD_TABLES = [
 # Key columns that should not be null for each table
 KEY_COLUMNS = {
     "climate_energy_demand.gold.fct_energy_demand_daily": ["iso_code", "date"],
-    "climate_energy_demand.gold.fct_forest_resilience_annual": ["h3_cell_index", "year"],
+    "climate_energy_demand.gold.fct_forest_resilience_annual": ["iso_code", "year"],
     "climate_energy_demand.gold.fct_ground_truth_verification_daily": ["station_id", "date"]
 }
 
@@ -174,8 +174,8 @@ class TestBusinessLogic:
         assert stats["max_anomaly"] <= 30, \
             f"Maximum temp_anomaly {stats['max_anomaly']} is suspiciously high"
     
-    def test_forest_sequestration_efficiency(self, spark):
-        """Test sequestration_efficiency is calculated correctly."""
+    def test_forest_carbon_density(self, spark):
+        """Test carbon_density is calculated correctly."""
         table_name = "climate_energy_demand.gold.fct_forest_resilience_annual"
         
         if not spark.catalog.tableExists(table_name):
@@ -183,17 +183,17 @@ class TestBusinessLogic:
         
         df = spark.table(table_name)
         
-        if "sequestration_efficiency" not in df.columns:
-            pytest.skip("sequestration_efficiency column not found")
+        if "carbon_density" not in df.columns:
+            pytest.skip("carbon_density column not found")
         
-        # Where forest_area_ha > 0, sequestration_efficiency should not be null
+        # Where forest_area_ha > 0, carbon_density should not be null
         invalid_count = df.filter(
             (col("forest_area_ha") > 0) &
-            col("sequestration_efficiency").isNull()
+            col("carbon_density").isNull()
         ).count()
         
         assert invalid_count == 0, \
-            f"Found {invalid_count} rows with missing sequestration_efficiency despite having forest area"
+            f"Found {invalid_count} rows with missing carbon_density despite having forest area"
     
     def test_ground_truth_error_metrics(self, spark):
         """Test that error metrics are calculated correctly."""

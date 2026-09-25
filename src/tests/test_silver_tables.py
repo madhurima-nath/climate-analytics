@@ -10,7 +10,7 @@ import os
 
 # Import project modules for validation
 from src.common.audit_utils import get_last_watermark, AUDIT_TABLE
-from src.common.shared_logic import calculate_thermal_stress, geospatial_indexing, relational_normalisation
+from src.common.shared_logic import calculate_thermal_stress, relational_normalisation
 
 # =============================================================================
 # FIXTURES
@@ -22,17 +22,15 @@ from src.common.shared_logic import calculate_thermal_stress, geospatial_indexin
 # TABLE DEFINITIONS
 # =============================================================================
 
-# All 10 silver tables that should exist
+# All 8 silver tables that should exist
 EXPECTED_SILVER_TABLES = [
     "climate_energy_demand.silver.energy_metrics",
     "climate_energy_demand.silver.weather_observations",
     "climate_energy_demand.silver.weather_projections",
     "climate_energy_demand.silver.weather_historical",
     "climate_energy_demand.silver.dim_stations",
-    "climate_energy_demand.silver.dim_h3_grid",
     "climate_energy_demand.silver.dim_date",
     "climate_energy_demand.silver.dim_locations",
-    "climate_energy_demand.silver.carbon_flux_spatial",
     "climate_energy_demand.silver.forest_inventory_annual"
 ]
 
@@ -43,10 +41,8 @@ KEY_COLUMNS = {
     "climate_energy_demand.silver.weather_projections": ["model", "country", "date", "h3_index"],
     "climate_energy_demand.silver.weather_historical": ["country", "date"],
     "climate_energy_demand.silver.dim_stations": ["station_id"],
-    "climate_energy_demand.silver.dim_h3_grid": ["h3_cell"],
     "climate_energy_demand.silver.dim_date": ["date"],
     "climate_energy_demand.silver.dim_locations": ["iso_code"],
-    "climate_energy_demand.silver.carbon_flux_spatial": ["h3_cell", "year"],
     "climate_energy_demand.silver.forest_inventory_annual": ["country_name", "land_use_category", "unit", "year"]
 }
 
@@ -57,10 +53,8 @@ MIN_ROW_COUNTS = {
     "climate_energy_demand.silver.weather_projections": 100,
     "climate_energy_demand.silver.weather_historical": 1000,
     "climate_energy_demand.silver.dim_stations": 10,
-    "climate_energy_demand.silver.dim_h3_grid": 10,
     "climate_energy_demand.silver.dim_date": 365,
     "climate_energy_demand.silver.dim_locations": 10,
-    "climate_energy_demand.silver.carbon_flux_spatial": 100,
     "climate_energy_demand.silver.forest_inventory_annual": 10
 }
 
@@ -116,12 +110,11 @@ class TestImports:
         """Test shared_logic module imports correctly."""
         from src.common import shared_logic
         assert hasattr(shared_logic, 'calculate_thermal_stress')
-        assert hasattr(shared_logic, 'geospatial_indexing')
         assert hasattr(shared_logic, 'relational_normalisation')
     
     def test_import_transforms(self):
         """Test all transform modules import correctly."""
-        from src.transforms import energy, weather, geospatial, nature, common
+        from src.transforms import energy, weather, nature, common
         
         # Check energy module
         assert hasattr(energy, 'process_energy_metrics')
@@ -250,45 +243,7 @@ class TestMergeAndDedup:
             "No silver tables have audit records"
 
 # =============================================================================
-# TEST 6: GEOSPATIAL INDEXING
-# =============================================================================
-
-class TestGeospatialFunctions:
-    """Test geospatial indexing functions."""
-    
-    def test_h3_indexing(self, spark):
-        """Test H3 geospatial indexing."""
-        # Create test data with known coordinates
-        # NYC: ~40.7N, -74.0W
-        test_data = [(40.7, -74.0), (51.5, -0.1)]  # NYC and London
-        df = spark.createDataFrame(test_data, ["latitude", "longitude"])
-        
-        # Apply H3 indexing
-        result_df = geospatial_indexing(df, "latitude", "longitude")
-        
-        # Check that h3_index column exists and is not null
-        assert "h3_index_res6" in result_df.columns, "H3 index column not created"
-        
-        result_count = result_df.filter(col("h3_index_res6").isNotNull()).count()
-        assert result_count == 2, "H3 indexing failed for some rows"
-    
-    def test_h3_grid_table_populated(self, spark):
-        """Test that H3 grid dimension table has valid indices."""
-        table_name = "climate_energy_demand.silver.dim_h3_grid"
-        
-        if not spark.catalog.tableExists(table_name):
-            pytest.skip(f"Table {table_name} does not exist")
-        
-        df = spark.table(table_name)
-        
-        # Check that h3_index column exists and has no nulls
-        assert "h3_cell" in df.columns, "h3_cell column not found in dim_h3_grid"
-        
-        null_count = df.filter(col("h3_cell").isNull()).count()
-        assert null_count == 0, f"Found {null_count} null h3_cell values in dim_h3_grid"
-
-# =============================================================================
-# TEST 7: DATA QUALITY SPOT CHECKS
+# TEST 6: DATA QUALITY SPOT CHECKS
 # =============================================================================
 
 class TestDataQuality:

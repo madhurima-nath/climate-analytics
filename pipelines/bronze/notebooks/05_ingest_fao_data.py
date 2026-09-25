@@ -1,15 +1,13 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC # Bronze: Forestry, Land Cover, and Carbon Flux Ingestion (FAO & GFW)
+# MAGIC # Bronze: Forestry, Land Cover, and Land Use Ingestion (FAO)
 # MAGIC
 # MAGIC This notebook performs a bulk ingestion of high-resolution forestry and environmental datasets 
-# MAGIC from FAOSTAT and Global Forest Watch. It follows the "Raw Mirror" pattern, where every source 
+# MAGIC from FAOSTAT. It follows the "Raw Mirror" pattern, where every source 
 # MAGIC CSV is converted 1-to-1 into a Bronze Delta table with zero filtering or transformations.
 # MAGIC
 # MAGIC ### Sources
 # MAGIC * **FAOSTAT (UN):** Land Use (RL), Land Cover (LC), and Temperature Change (ET) domains.
-# MAGIC * **Global Forest Watch (GFW):** Carbon Net Flux, Emissions Polygons, Tropical Tree Cover, 
-# MAGIC   and Global Peatlands.
 # MAGIC
 # MAGIC ### Logic & Maintenance
 # MAGIC * **Egress Workaround:** As with the OWID and NOAA datasets, these files are manually 
@@ -27,7 +25,7 @@
 # MAGIC All CSV files must be present in:
 # MAGIC `/Volumes/climate_energy_demand/bronze/raw_uploads/`
 # MAGIC
-# MAGIC These are ingested from a Unity Catalog Volume to  bypass egress restrictions on the Databricks Free Edition. No transformations or joins are performed at this stage; relational mapping is deferred to Silver.
+# MAGIC These are ingested from a Unity Catalog Volume to bypass egress restrictions on the Databricks Free Edition. No transformations or joins are performed at this stage; relational mapping is deferred to Silver.
 # MAGIC To upload the files via Catalog → climate_energy_demand → bronze → raw_uploads → "Upload to this volume".
 
 # COMMAND ----------
@@ -64,9 +62,6 @@ def get_target_table_name(filename):
     if "inputs_landuse" in fn: base = "fao_land_use"
     elif "environment_landcover" in fn: base = "fao_land_cover"
     elif "environment_temperature_change" in fn: base = "fao_temp_change"
-    elif "forest_greenhouse" in fn: return fn.replace("forest_greenhouse_gas_", "gfw_").replace(".csv", "")
-    elif "global_peatlands" in fn: return "gfw_peatlands"
-    elif "tropical_tree_cover" in fn: return "gfw_tropical_tree_cover"
     else: return None
 
     if "data_noflag" in fn: sub = "data_noflag"

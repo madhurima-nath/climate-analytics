@@ -203,6 +203,17 @@ resources:
               layer: "gold"
               task_key: "validate_gold_data"
 
+  dashboards:
+    # === MONITORING DASHBOARD ===
+    # The .lvdash.json file is tracked in Git at dashboard/Climate Analysis Dashboard.lvdash.json.
+    # Registering it as a bundle resource enables one-command deploy (bundle deploy),
+    # CI/CD integration, multi-target environment promotion, and bundle validation.
+    # The 4 SQL datasets are embedded directly in the .lvdash.json — no external SQL files needed.
+    climate_monitoring:
+      display_name: "Climate Analysis Dashboard"
+      file_path: "./dashboard/Climate Analysis Dashboard.lvdash.json"
+      warehouse_id: "${var.warehouse_id}"
+
 targets:
   dev:
     workspace:

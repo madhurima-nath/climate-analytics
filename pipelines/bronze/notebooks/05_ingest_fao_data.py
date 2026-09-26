@@ -1,4 +1,8 @@
 # Databricks notebook source
+# /// script
+# [tool.databricks.environment]
+# environment_version = "6"
+# ///
 # MAGIC %md
 # MAGIC # Bronze: Forestry, Land Cover, and Land Use Ingestion (FAO)
 # MAGIC
@@ -20,6 +24,10 @@
 # MAGIC   to ensure the Bronze layer remains a robust, reusable raw archive.
 # MAGIC * **Lineage:** Every record is enriched with `ingested_at` (timestamp) and `source_file` 
 # MAGIC   (path) metadata.
+# MAGIC * **Incremental MERGE:** Uses `MERGE INTO ... WHEN NOT MATCHED THEN INSERT` instead of 
+# MAGIC   `mode("overwrite")`. Existing rows that are identical to the CSV keep their original 
+# MAGIC   `ingested_at`, so the Silver watermark filter only picks up genuinely new data. 
+# MAGIC   Only truly new rows (or rows with changed values) get a fresh `current_timestamp()`.
 # MAGIC
 # MAGIC ### Setup
 # MAGIC All CSV files must be present in:
@@ -31,6 +39,7 @@
 # COMMAND ----------
 
 import re
+import time
 from pyspark.sql.functions import col, current_timestamp, input_file_name
 
 # COMMAND ----------
@@ -101,10 +110,47 @@ for file in files:
         df_final = (df.withColumn("ingested_at", current_timestamp())
                       .select("*", col("_metadata.file_path").alias("source_file")))
 
-        # 4. Write to Delta
-        (df_final.write.format("delta")
-            .mode("overwrite")
-            .option("overwriteSchema", "true")
-            .saveAsTable(f"{CATALOG}.{SCHEMA}.{table_name}"))
+        # 4. Write to Delta (MERGE: preserves ingested_at for unchanged rows)
+        # Only genuinely new rows get a fresh current_timestamp().
+        # This ensures the Silver watermark filter only picks up truly new data,
+        # avoiding full reprocessing of the entire dataset on every reload.
+        full_table = f"{CATALOG}.{SCHEMA}.{table_name}"
+
+        if spark.catalog.tableExists(full_table):
+            # Compare schemas: if columns changed, fall back to full overwrite
+            existing_cols = set(spark.table(full_table).columns)
+            new_cols = set(df_final.columns)
+
+            if existing_cols != new_cols:
+                print(f"  ⚠️  Schema changed — falling back to full overwrite")
+                (df_final.write.format("delta")
+                    .mode("overwrite")
+                    .option("overwriteSchema", "true")
+                    .saveAsTable(full_table))
+            else:
+                # MERGE on all data columns (excluding metadata).
+                # WHEN NOT MATCHED → INSERT (new rows get fresh ingested_at)
+                # WHEN MATCHED → no-op (existing rows keep their original ingested_at)
+                view_name = f"v_ingest_{table_name}_{int(time.time())}"
+                df_final.createOrReplaceTempView(view_name)
+
+                data_cols = [c for c in df_final.columns if c not in ("ingested_at", "source_file")]
+                merge_cond = " AND ".join([f"t.{c} <=> s.{c}" for c in data_cols])
+
+                before_count = spark.table(full_table).count()
+                spark.sql(f"""
+                    MERGE INTO {full_table} t USING {view_name} s ON {merge_cond}
+                    WHEN NOT MATCHED THEN INSERT *
+                """)
+                after_count = spark.table(full_table).count()
+                new_rows = after_count - before_count
+                print(f"  ✅ Merged ({new_rows} new rows, existing ingested_at preserved)")
+        else:
+            # First load — create table
+            (df_final.write.format("delta")
+                .mode("overwrite")
+                .option("overwriteSchema", "true")
+                .saveAsTable(full_table))
+            print(f"  ✅ Created table ({df_final.count()} rows)")
     else:
         print(f"Skipped: {file.name}")

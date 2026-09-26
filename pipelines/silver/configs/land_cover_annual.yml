@@ -1,0 +1,39 @@
+# =============================================================================
+# TARGET DEFINITION
+# =============================================================================
+target_table: "climate_energy_demand.silver.land_cover_annual"
+description: "Annual national land cover metrics by satellite source, standardised from FAO Land Cover data into long-format."
+
+# =============================================================================
+# SOURCE MAPPING
+# =============================================================================
+sources:
+  fao_data: "climate_energy_demand.bronze.fao_land_cover_data_noflag"
+
+# =============================================================================
+# TRANSFORMATION LOGIC
+# =============================================================================
+# Found in: src/transforms/nature.py
+module: "nature"
+function: "process_land_cover"
+
+# =============================================================================
+# STATE & INTEGRITY (For Manual Watermarking)
+# =============================================================================
+# Monitors the bronze table for new manual uploads.
+watermark_column: "ingested_at"
+
+# Identifies a unique record by Country, Year, Land Cover Category, Satellite Source, and Unit.
+# Prevents duplicate entries during incremental FAO data updates.
+merge_keys:
+  - "country_name"
+  - "year"
+  - "land_cover_category"
+  - "element"
+  - "unit"
+
+# =============================================================================
+# PARAMETERS
+# =============================================================================
+params:
+  start_year: 2010    # Aligning with the weather study period

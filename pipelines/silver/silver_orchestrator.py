@@ -169,6 +169,13 @@ def run_silver_orchestration():
             transform_func = getattr(module, cfg['function'])
             silver_df = transform_func(sources, cfg.get('params', {}))
 
+            # Add row-level audit columns
+            silver_df = (silver_df
+                .withColumn("_loaded_at", F.current_timestamp())
+                .withColumn("_updated_at", F.current_timestamp())
+                .withColumn("_run_id", F.lit(_orch_run_id))
+            )
+
             # Load
             row_count = silver_df.count()
             if not spark.catalog.tableExists(target_table):
@@ -178,7 +185,7 @@ def run_silver_orchestration():
                 view_name = f"v_updates_{uuid.uuid4().hex}"
                 silver_df.createOrReplaceTempView(view_name)
                 join_cond = " AND ".join([f"t.{k} = s.{k}" for k in cfg['merge_keys']])
-                spark.sql(f"MERGE INTO {target_table} t USING {view_name} s ON {join_cond} WHEN MATCHED THEN UPDATE SET * WHEN NOT MATCHED THEN INSERT *")
+                spark.sql(f"MERGE INTO {target_table} t USING {view_name} s ON {join_cond} WHEN MATCHED THEN UPDATE SET * EXCEPT (_loaded_at) WHEN NOT MATCHED THEN INSERT *")
                 print(f"✅ Merged {target_table} ({row_count:,} rows)")
             
             _detail_completed.append(f"{target_table} ({row_count:,} rows)")

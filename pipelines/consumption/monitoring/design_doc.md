@@ -329,11 +329,11 @@ ORDER BY days_since_last_run DESC;
 
 **Dashboard File**: `dashboard/Climate Analysis Dashboard.lvdash.json` (in the DABs bundle root)
 
-**Status**: ✅ Implemented and rendering — single page ("1. Monitoring") with 4 datasets, 17 widgets
+**Status**: ✅ Implemented and rendering — single page ("1. Monitoring") with 5 datasets, 17 widgets
 
 ---
 
-#### Datasets (4)
+#### Datasets (5)
 
 ##### 1. ds_latest_pipeline_run (`ed87896b`)
 
@@ -368,7 +368,116 @@ ORDER BY run_timestamp DESC;
 
 ---
 
-##### 2. ds_latest_test_results (`766c9ff9`)
+##### 2. bronze_details (Bronze Table Details)
+
+Static inventory of all bronze tables with row counts and source file paths.
+
+```sql
+WITH bronze_tables AS (
+  SELECT table_name
+  FROM climate_energy_demand.information_schema.tables
+  WHERE table_schema = 'bronze'
+),
+table_stats AS (
+  SELECT 'fao_land_cover_all_data' AS table_name, COUNT(*) AS row_count FROM climate_energy_demand.bronze.fao_land_cover_all_data
+  UNION ALL
+  SELECT 'fao_land_cover_area_codes', COUNT(*) FROM climate_energy_demand.bronze.fao_land_cover_area_codes
+  UNION ALL
+  SELECT 'fao_land_cover_data_noflag', COUNT(*) FROM climate_energy_demand.bronze.fao_land_cover_data_noflag
+  UNION ALL
+  SELECT 'fao_land_cover_elements', COUNT(*) FROM climate_energy_demand.bronze.fao_land_cover_elements
+  UNION ALL
+  SELECT 'fao_land_cover_flags', COUNT(*) FROM climate_energy_demand.bronze.fao_land_cover_flags
+  UNION ALL
+  SELECT 'fao_land_cover_item_codes', COUNT(*) FROM climate_energy_demand.bronze.fao_land_cover_item_codes
+  UNION ALL
+  SELECT 'fao_land_use_all_data', COUNT(*) FROM climate_energy_demand.bronze.fao_land_use_all_data
+  UNION ALL
+  SELECT 'fao_land_use_area_codes', COUNT(*) FROM climate_energy_demand.bronze.fao_land_use_area_codes
+  UNION ALL
+  SELECT 'fao_land_use_data_noflag', COUNT(*) FROM climate_energy_demand.bronze.fao_land_use_data_noflag
+  UNION ALL
+  SELECT 'fao_land_use_elements', COUNT(*) FROM climate_energy_demand.bronze.fao_land_use_elements
+  UNION ALL
+  SELECT 'fao_land_use_flags', COUNT(*) FROM climate_energy_demand.bronze.fao_land_use_flags
+  UNION ALL
+  SELECT 'fao_land_use_item_codes', COUNT(*) FROM climate_energy_demand.bronze.fao_land_use_item_codes
+  UNION ALL
+  SELECT 'fao_temp_change_all_data', COUNT(*) FROM climate_energy_demand.bronze.fao_temp_change_all_data
+  UNION ALL
+  SELECT 'fao_temp_change_area_codes', COUNT(*) FROM climate_energy_demand.bronze.fao_temp_change_area_codes
+  UNION ALL
+  SELECT 'fao_temp_change_data_noflag', COUNT(*) FROM climate_energy_demand.bronze.fao_temp_change_data_noflag
+  UNION ALL
+  SELECT 'fao_temp_change_elements', COUNT(*) FROM climate_energy_demand.bronze.fao_temp_change_elements
+  UNION ALL
+  SELECT 'fao_temp_change_flags', COUNT(*) FROM climate_energy_demand.bronze.fao_temp_change_flags
+  UNION ALL
+  SELECT 'fao_temp_change_months', COUNT(*) FROM climate_energy_demand.bronze.fao_temp_change_months
+  UNION ALL
+  SELECT 'noaa_gsod', COUNT(*) FROM climate_energy_demand.bronze.noaa_gsod
+  UNION ALL
+  SELECT 'openmeteo_climate_cmip6_projections', COUNT(*) FROM climate_energy_demand.bronze.openmeteo_climate_cmip6_projections
+  UNION ALL
+  SELECT 'openmeteo_weather', COUNT(*) FROM climate_energy_demand.bronze.openmeteo_weather
+)
+SELECT 
+  ts.table_name AS `Table`,
+  FORMAT_NUMBER(ts.row_count, 0) AS `Row Count`,
+  CASE 
+    WHEN ts.table_name IN ('noaa_gsod') THEN 'API (NOAA GSOD)'
+    WHEN ts.table_name IN ('openmeteo_weather') THEN 'API (OpenMeteo Weather)'
+    WHEN ts.table_name IN ('openmeteo_climate_cmip6_projections') THEN 'API (OpenMeteo Climate)'
+    WHEN ts.table_name LIKE 'fao_land_cover%' THEN 'bronze/raw_uploads/Environment_LandCover_' || 
+      CASE 
+        WHEN ts.table_name = 'fao_land_cover_all_data' THEN 'All_Data.csv'
+        WHEN ts.table_name = 'fao_land_cover_area_codes' THEN 'AreaCodes.csv'
+        WHEN ts.table_name = 'fao_land_cover_data_noflag' THEN 'All_Data_NOFLAG.csv'
+        WHEN ts.table_name = 'fao_land_cover_elements' THEN 'Elements.csv'
+        WHEN ts.table_name = 'fao_land_cover_flags' THEN 'Flags.csv'
+        WHEN ts.table_name = 'fao_land_cover_item_codes' THEN 'ItemCodes.csv'
+      END
+    WHEN ts.table_name LIKE 'fao_land_use%' THEN 'bronze/raw_uploads/Inputs_LandUse_' || 
+      CASE 
+        WHEN ts.table_name = 'fao_land_use_all_data' THEN 'All_Data.csv'
+        WHEN ts.table_name = 'fao_land_use_area_codes' THEN 'AreaCodes.csv'
+        WHEN ts.table_name = 'fao_land_use_data_noflag' THEN 'All_Data_NOFLAG.csv'
+        WHEN ts.table_name = 'fao_land_use_elements' THEN 'Elements.csv'
+        WHEN ts.table_name = 'fao_land_use_flags' THEN 'Flags.csv'
+        WHEN ts.table_name = 'fao_land_use_item_codes' THEN 'ItemCodes.csv'
+      END
+    WHEN ts.table_name LIKE 'fao_temp_change%' THEN 'bronze/raw_uploads/Environment_Temperature_change_' || 
+      CASE 
+        WHEN ts.table_name = 'fao_temp_change_all_data' THEN 'All_Data.csv'
+        WHEN ts.table_name = 'fao_temp_change_area_codes' THEN 'AreaCodes.csv'
+        WHEN ts.table_name = 'fao_temp_change_data_noflag' THEN 'All_Data_NOFLAG.csv'
+        WHEN ts.table_name = 'fao_temp_change_elements' THEN 'Elements.csv'
+        WHEN ts.table_name = 'fao_temp_change_flags' THEN 'Flags.csv'
+        WHEN ts.table_name = 'fao_temp_change_months' THEN 'Months.csv'
+      END
+  END AS `Source File`
+FROM table_stats ts
+ORDER BY ts.table_name;
+```
+
+**Source tables**: All bronze tables enumerated via UNION ALL
+
+**Key transformations**:
+- Row counts retrieved via COUNT(*) for each of the 21 bronze tables
+- Row Count column formatted with commas via FORMAT_NUMBER for readability
+- Source File shows full path from "bronze/raw_uploads/..." for file-based tables
+- API-sourced tables (noaa_gsod, openmeteo_weather, openmeteo_climate_cmip6_projections) labeled as "API (...)" with descriptive source name
+
+**Widget configuration**:
+- **rowsPerPage: 21** — Shows all 21 bronze tables at once with no pagination (Bronze is static inventory, not pipeline execution runs like Silver/Gold)
+- **Column widths**: Table 280px, Row Count 100px (right-aligned), Source File 220px
+- **Why no "Latest Run"?**: Bronze layer shows static table inventory. Silver and Gold widgets track pipeline execution runs (Latest Run concept), but Bronze does not have orchestration runs—only validation.
+
+**Used by widget**: Bronze Table Details
+
+---
+
+##### 3. ds_latest_test_results (`766c9ff9`)
 
 Latest test suite execution with stakeholder-friendly presentation: test names human-readable via INITCAP/REPLACE, status as pass/fail icons, error_type inferred from error_message when NULL for failed tests, details summarized not verbatim.
 
@@ -384,7 +493,7 @@ Latest test suite execution with stakeholder-friendly presentation: test names h
 
 ---
 
-##### 3. ds_per_table_details (`per_table_details`)
+##### 4. ds_per_table_details (`per_table_details`)
 
 Parses the `per_table_details` string from the latest orchestration run per layer into individual table-level rows showing completed/skipped status.
 
@@ -400,7 +509,7 @@ Parses the `per_table_details` string from the latest orchestration run per laye
 
 ---
 
-##### 4. ds_table_kpis (`table_kpis`)
+##### 5. ds_table_kpis (`table_kpis`)
 
 Table counts and latest refresh dates per medallion layer.
 
@@ -424,7 +533,9 @@ No top filter bar. All three layers display simultaneously in side-by-side colum
 
 **Rows 1-3**: Run Info (table widgets from `ds_latest_pipeline_run`) — each shows Task Type, Run Time (UTC), Result, status, duration_seconds, configs_completed, configs_skipped, configs_failed, filtered to the column's layer.
 
-**Rows 4-7**: Per-Table Details (Silver and Gold only, from `ds_per_table_details`) — shows individual table-level completed/skipped status. Bronze omits this section because it is validation-only.
+**Rows 4-10**: Per-Table Details:
+- **Bronze** (from `bronze_details` dataset): Static inventory of all 21 bronze tables showing row counts and source file paths. Single scrollable table (rowsPerPage: 21) with no pagination—Bronze is static data, not pipeline runs.
+- **Silver and Gold** (from `ds_per_table_details`): Individual table-level completed/skipped status from latest orchestration run.
 
 **Validation sections**: Bronze Validation (expanded, height 8), Silver Validation, Gold Validation — test results from `ds_latest_test_results`, filtered to each layer. Columns: Validation, Result, Error Type, Details.
 
@@ -458,7 +569,7 @@ Each widget filters by layer using widget-scoped predicates (no page-level filte
 | bronze_run_info | table | ds_latest_pipeline_run | Latest bronze pipeline runs |
 | silver_metadata | table | ds_latest_pipeline_run | Latest silver pipeline runs |
 | gold_metadata | table | ds_latest_pipeline_run | Latest gold pipeline runs |
-| bronze_details | — | — | (Reserved, bronze has no orchestration) |
+| bronze_details | table | bronze_details | Bronze table inventory (all 21 tables, row counts, source files) |
 | silver_details | table | ds_per_table_details | Silver per-table load breakdown |
 | gold_details | table | ds_per_table_details | Gold per-table load breakdown |
 | bronze_tests | table | ds_latest_test_results | Bronze validation results |
@@ -468,7 +579,7 @@ Each widget filters by layer using widget-scoped predicates (no page-level filte
 
 #### Current Data State
 
-- **Bronze** — 1 run (validation, completed, 91s). 9 test results: 7 pass, 2 fail (Bronze Data Freshness / Schemas Exist). Config counts NULL (validation task, no orchestration).
+- **Bronze** — 1 run (validation, completed, 91s). 9 test results: 7 pass, 2 fail (Bronze Data Freshness / Schemas Exist). Config counts NULL (validation task, no orchestration). Bronze Table Details widget shows static inventory of all 21 bronze tables with row counts (formatted with commas) and full source file paths ("bronze/raw_uploads/..." for file-based, "API (...)" for API-sourced tables). No pagination (rowsPerPage: 21).
 - **Silver** — 1 run (validation, completed). Per-table details NULL. 0 test results in latest execution.
 - **Gold** — 0 rows (no gold layer pipeline runs logged yet).
 
@@ -501,7 +612,7 @@ Git tracking alone version-controls the file, but registering it as a bundle res
 
 #### Streamlit Note
 
-The entire Lakeview dashboard design — including all 4 datasets (`ds_latest_pipeline_run`, `ds_latest_test_results`, `ds_per_table_details`, `ds_table_kpis`), the 3-column layout, KPI counters, run info tables, per-table details, validation tables with human-readable test names and summarized error details, and all SQL queries — must be replicated in the Streamlit app. See the Streamlit section below for replication requirements.
+The entire Lakeview dashboard design — including all 5 datasets (`ds_latest_pipeline_run`, `bronze_details`, `ds_latest_test_results`, `ds_per_table_details`, `ds_table_kpis`), the 3-column layout, KPI counters, run info tables, per-table details (Bronze: static 21-table inventory; Silver/Gold: dynamic orchestration breakdown), validation tables with human-readable test names and summarized error details, and all SQL queries — must be replicated in the Streamlit app. See the Streamlit section below for replication requirements.
 
 ---
 
@@ -511,7 +622,7 @@ The entire Lakeview dashboard design — including all 4 datasets (`ds_latest_pi
 
 Provide external stakeholders (non-Databricks users) with read-only access to pipeline monitoring.
 
-> **⚠️ Replication Requirement**: The entire Lakeview dashboard design — including the Layer Summary Grid (3-column layout, header badges, run info, per-table details, validation tables with human-readable test names and summarized error details), > **Replication Requirement**: The entire Lakeview dashboard design — including all 4 datasets (`ds_latest_pipeline_run`, `ds_latest_test_results`, `ds_per_table_details`, `ds_table_kpis`), the single-page 3-column layout, KPI counters (table counts + refresh dates), run info tables, per-table details, validation tables with human-readable test names and summarized error details, and all SQL queries — must be replicated in this Streamlit app. External stakeholders should see the same information and layout as the Lakeview dashboard.
+> **⚠️ Replication Requirement**: The entire Lakeview dashboard design — including all 5 datasets (`ds_latest_pipeline_run`, `bronze_details`, `ds_latest_test_results`, `ds_per_table_details`, `ds_table_kpis`), the single-page 3-column layout, KPI counters (table counts + refresh dates), run info tables, per-table details (Bronze: static 21-table inventory with full source paths; Silver/Gold: dynamic orchestration breakdown), validation tables with human-readable test names and summarized error details, and all SQL queries — must be replicated in this Streamlit app. External stakeholders should see the same information and layout as the Lakeview dashboard.
 
 ### Architecture
 
@@ -653,10 +764,11 @@ WHERE layer = 'gold'  -- Just add this filter
 - Bronze, Silver, and Gold validation tests
 - Error parsing (ANSI stripping, component extraction)
 - Complete test tracking (all tests recorded)
-- Lakeview Dashboard (single page, 4 datasets, 17 widgets — fully implemented and rendering)
+- Lakeview Dashboard (single page, 5 datasets, 17 widgets — fully implemented and rendering)
   - ds_latest_pipeline_run — latest 2 runs per layer/task_type
+  - bronze_details — static inventory of all 21 bronze tables (row counts via UNION ALL COUNT(*), source file paths with "bronze/raw_uploads/" prefix for file-based tables and "API (...)" labels for API-sourced tables)
   - ds_latest_test_results — latest test suite with human-readable names and summarized errors
-  - ds_per_table_details — per-table load breakdown (completed/skipped) via REGEXP + LATERAL VIEW EXPLODE
+  - ds_per_table_details — per-table load breakdown (completed/skipped) for Silver/Gold via REGEXP + LATERAL VIEW EXPLODE
   - ds_table_kpis — table counts and latest refresh dates per medallion layer
   - KPI counter widgets (table counts + refresh dates per layer)
   - Infrastructure Validation widget

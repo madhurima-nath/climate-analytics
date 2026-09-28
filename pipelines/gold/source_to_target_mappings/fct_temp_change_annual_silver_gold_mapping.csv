@@ -1,0 +1,9 @@
+Source_Table,Source_Column,Target_Table,Target_Column,Logic
+silver.temp_change_annual,country_name,fct_temp_change_annual,country_name,Direct map
+silver.temp_change_annual,year,fct_temp_change_annual,year,Direct map
+silver.temp_change_annual,months,fct_temp_change_annual,months,Direct map
+silver.temp_change_annual,element,fct_temp_change_annual,element,Direct map
+silver.temp_change_annual,unit,fct_temp_change_annual,unit,Direct map
+silver.temp_change_annual,value,fct_temp_change_annual,value,Direct map
+silver.dim_locations,iso_code,fct_temp_change_annual,iso_code,Join on country_name to resolve ISO-3166 alpha-3 code
+Calculation,N/A,fct_temp_change_annual,is_warming,TRUE when element='Temperature change' AND value > 0

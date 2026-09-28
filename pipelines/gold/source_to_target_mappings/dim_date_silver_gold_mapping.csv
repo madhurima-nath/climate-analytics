@@ -1,0 +1,8 @@
+Source_Table,Source_Column,Target_Table,Target_Column,Logic
+silver.dim_date,date,dim_date,date,Direct map (Primary Key)
+silver.dim_date,year,dim_date,year,Direct map
+silver.dim_date,month,dim_date,month,Direct map
+silver.dim_date,is_weekend,dim_date,is_weekend,Direct map
+silver.dim_date,season,dim_date,season,Direct map
+Calculation,N/A,dim_date,heating_season,TRUE when month in (10,11,12,1,2,3); Northern Hemisphere convention
+Calculation,N/A,dim_date,cooling_season,TRUE when month in (6,7,8,9)

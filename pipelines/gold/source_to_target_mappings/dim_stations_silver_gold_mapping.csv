@@ -1,0 +1,7 @@
+Source_Table,Source_Column,Target_Table,Target_Column,Logic
+silver.dim_stations,station_id,dim_stations,station_id,Direct map (Primary Key)
+silver.dim_stations,station_name,dim_stations,station_name,Direct map
+silver.dim_stations,country,dim_stations,country,Direct map
+silver.weather_observations,station_id,dim_stations,koppen_zone,Koppen-Geiger classification per station
+Calculation,N/A,dim_stations,koppen_description,Human-readable zone name from Koppen classification
+Calculation,N/A,dim_stations,data_quality_flag,Sufficient / Insufficient precipitation data / No weather data

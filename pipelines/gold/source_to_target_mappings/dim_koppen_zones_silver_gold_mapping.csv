@@ -1,0 +1,5 @@
+Source_Table,Source_Column,Target_Table,Target_Column,Logic
+Python_Dict,KOPPEN_DESCRIPTIONS,dim_koppen_zones,koppen_zone,Koppen-Geiger climate zone code (Primary Key)
+Python_Dict,KOPPEN_DESCRIPTIONS,dim_koppen_zones,koppen_description,Human-readable climate zone name
+Python_Dict,KOPPEN_BASE_TEMPS,dim_koppen_zones,heating_base_temp,Heating degree day base temp per climate zone
+Python_Dict,KOPPEN_BASE_TEMPS,dim_koppen_zones,cooling_base_temp,Cooling degree day base temp per climate zone

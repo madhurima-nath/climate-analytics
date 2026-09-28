@@ -1,0 +1,22 @@
+Source_Table,Source_Column,Target_Table,Target_Column,Logic
+silver.weather_historical,date,fct_energy_demand_daily,date,Direct map (cast to date; Primary Key)
+silver.weather_historical,temp_mean_c,fct_energy_demand_daily,avg_temperature_c,Direct map (alias)
+silver.energy_metrics,demand_twh,fct_energy_demand_daily,annual_baseline_twh,Broadcast join on iso_code and year; alias from demand_twh
+silver.energy_metrics,generation_twh,fct_energy_demand_daily,generation_twh,Broadcast join on iso_code and year
+silver.dim_date,is_weekend,fct_energy_demand_daily,is_weekend,Left join on date
+gold.dim_locations,iso_code,fct_energy_demand_daily,iso_code,Broadcast join on country to resolve ISO code (Primary Key)
+gold.dim_locations,heating_base_temp,fct_energy_demand_daily,heating_base_temp,From Koppen-based base temp; coalesce with 15
+gold.dim_locations,cooling_base_temp,fct_energy_demand_daily,cooling_base_temp,From Koppen-based base temp; coalesce with 25
+Calculation,N/A,fct_energy_demand_daily,heating_degree_days,Max(0, heating_base_temp - temp_mean_c)
+Calculation,N/A,fct_energy_demand_daily,cooling_degree_days,Max(0, temp_mean_c - cooling_base_temp)
+Calculation,N/A,fct_energy_demand_daily,temp_anomaly,temp_mean_c - 10-year rolling monthly mean per iso_code
+Calculation,N/A,fct_energy_demand_daily,is_heatwave_event,TRUE when temp_anomaly > 5.0 (EU/WMO standard)
+Calculation,N/A,fct_energy_demand_daily,demand_sensitivity_index,(heating_degree_days + cooling_degree_days) / (demand_twh * 1000000 / 365)
+silver.dim_locations,country_name,dim_locations,country_name,Direct map
+silver.dim_locations,iso_code,dim_locations,iso_code,Direct map
+silver.dim_locations,fao_code,dim_locations,fao_code,Direct map
+silver.weather_observations,station_id,dim_locations,koppen_zone,Koppen-Geiger classification per station; mode per country
+Calculation,N/A,dim_locations,koppen_description,Human-readable zone name from Koppen classification
+Calculation,N/A,dim_locations,heating_base_temp,Climate-zone-specific base temp from Koppen lookup
+Calculation,N/A,dim_locations,cooling_base_temp,Climate-zone-specific base temp from Koppen lookup
+Calculation,N/A,dim_locations,data_quality_flag,Sufficient / Insufficient precipitation data / No weather data

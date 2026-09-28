@@ -1,0 +1,11 @@
+Source_Table,Source_Column,Target_Table,Target_Column,Logic
+silver.forest_inventory_annual,year,fct_forest_resilience_annual,year,Direct map (part of composite key)
+silver.forest_inventory_annual,value,fct_forest_resilience_annual,forest_area_ha,Filter land_use_category='Forest land' AND unit='1000 ha'; multiply value by 1000
+silver.forest_inventory_annual,value,fct_forest_resilience_annual,forest_carbon_mt,Filter land_use_category='Forest land' AND unit='million t'
+silver.weather_historical,temp_max_c,fct_forest_resilience_annual,extreme_heat_days_count,Count(days where temp_max_c > 30) grouped by country and year
+silver.weather_historical,temp_mean_c,fct_forest_resilience_annual,avg_temp_c,Average temp_mean_c grouped by country and year
+silver.dim_locations,iso_code,fct_forest_resilience_annual,iso_code,Join on country_name to resolve ISO-3166 alpha-3 code
+silver.forest_inventory_annual,country_name,fct_forest_resilience_annual,country_name,Direct map
+silver.land_cover_annual,value,fct_forest_resilience_annual,satellite_forest_area_ha,Filter land_cover_category='Tree-covered areas' AND element='Area from WorldCover'; multiply value by 1000
+Calculation,N/A,fct_forest_resilience_annual,carbon_density,forest_carbon_mt / forest_area_ha
+Calculation,N/A,fct_forest_resilience_annual,forest_area_discrepancy_pct,(satellite_forest_area_ha - forest_area_ha) / forest_area_ha * 100

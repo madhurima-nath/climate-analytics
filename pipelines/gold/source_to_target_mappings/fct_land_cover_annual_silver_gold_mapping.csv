@@ -1,0 +1,7 @@
+Source_Table,Source_Column,Target_Table,Target_Column,Logic
+silver.land_cover_annual,country_name,fct_land_cover_annual,country_name,Direct map
+silver.land_cover_annual,year,fct_land_cover_annual,year,Direct map
+silver.land_cover_annual,land_cover_category,fct_land_cover_annual,land_cover_category,Direct map
+silver.land_cover_annual,element,fct_land_cover_annual,element,Direct map
+silver.land_cover_annual,value,fct_land_cover_annual,area_ha,Multiply value by 1000 (convert from 1000 ha to ha)
+silver.dim_locations,iso_code,fct_land_cover_annual,iso_code,Join on country_name to resolve ISO-3166 alpha-3 code

@@ -58,7 +58,9 @@ def process_weather_observations(sources: dict, params: dict) -> DataFrame:
         F.round((F.col("temp") - 32) * 5/9, 2).alias("temp_mean_c"),
         F.round((F.col("max") - 32) * 5/9, 2).alias("temp_max_c"),
         F.round((F.col("min") - 32) * 5/9, 2).alias("temp_min_c"),
-        F.round(F.col("prcp") * 25.4, 2).alias("precip_mm")
+        F.when(F.col("prcp") == 99.99, F.lit(None).cast("double"))
+         .otherwise(F.round(F.col("prcp") * 25.4, 2))
+         .alias("precip_mm")
     )
     
     # Deduplicate on primary key - include country to handle shared stations

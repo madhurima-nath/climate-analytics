@@ -1,6 +1,6 @@
 # Climate, Energy & Nature: Silver Layer
 
-This repository contains the engineering logic for the **Silver Layer** of the data platform. The system harmonises disparate datasets from the FAO, OWID, NOAA, and OpenMeteo into a unified, query-ready state. This layer transforms the raw, 
+This repository contains the engineering logic for the **Silver Layer** of the data platform. The system harmonises disparate datasets from the FAO, OWID, NOAA, and OpenMeteo into a unified, query-ready state. 
 
 ## Core Objectives
 1. **Standardisation:** Transforming raw heterogeneous Bronze datasets into consistent, metric-standardised Delta tables.
@@ -23,16 +23,28 @@ graph TD
 ``` text
 ├── pipelines/
 │   ├── silver/
-│   │   ├── configs/           # YAML declarative pipeline definitions for the silver tables
-│   │   ├── docs/              # documentation for design, architectural decisions and roadmap
-│   │   ├── silver_orchestrator.py  # centralised execution engine
-│   │   └── setup_silver.sql   # audit schema initialisation
+│   │   ├── configs/                # YAML declarative pipeline definitions for the silver tables
+│   │   │   ├── energy_metrics.yml
+│   │   │   ├── weather_historical.yml
+│   │   │   ├── weather_observations.yml
+│   │   │   ├── weather_projections.yml
+│   │   │   ├── forest_inventory_annual.yml
+│   │   │   ├── land_cover_annual.yml
+│   │   │   ├── temp_change_annual.yml
+│   │   │   ├── dim_stations.yml
+│   │   │   ├── dim_date.yml
+│   │   │   └── dim_locations.yml
+│   │   ├── docs/                    # documentation for design, architectural decisions and roadmap
+│   │   ├── silver_orchestrator.py  # centralised execution engine (notebook)
+│   │   └── setup_silver.sql        # audit schema initialisation
 │   └── consumption/
-│       └── monitoring/        # AI/BI Dashboard & Genie definitions
+│       ├── monitoring/             # Monitoring tables & dashboard design doc
+│       └── analytics/              # Genie semantic instructions
 ├── src/
-│   ├── common/                # shared utilities and audit logic
-│   └── transforms/            # domain-specific transformation logic
-└── databricks.yml             # Databricks Asset Bundle (DAB) manifest
+│   ├── common/                    # shared utilities and audit logic
+│   ├── transforms/                # domain-specific transformation logic
+│   └── tests/                    # pytest suites (all layers)
+└── databricks.yml                 # Declarative Automation Bundle manifest
 ```
 
 ## Implementation Logic
@@ -57,10 +69,10 @@ Operational health is managed through the `consumption/monitoring/` layer.
 
 
 ## Deployment
-This project is deployed as a Databricks Asset Bundle (DAB).
+This project is deployed as a Declarative Automation Bundle.
 
 **Environment Constraints**:
-The current architecture is developed for the Databricks Free Edition (September 2026). In this version:
-* Standard job triggers are used in place of advanced Delta Live Tables (DLT) features.
+The current architecture is developed for the Databricks Free Edition. In this version:
+* Standard job triggers are used in place of advanced Lakeflow Spark Declarative Pipelines (SDP) features.
 * Basic Unity Catalog functionality is utilised for metadata management.
 * The transition path to the Paid/Enterprise tier is documented in `silver/docs/roadmap.md`.

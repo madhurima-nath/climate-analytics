@@ -386,3 +386,11 @@ Initialise: Run the setup/project_infrastructure.sql once manually in the SQL Ed
 Execute: Start the "Silver Layer: Master Orchestrator" job in the Databricks UI.
 
 This concludes the Silver Layer Design & Engineering Phase.
+
+## 8: Modeled vs Observed Grain Mismatch (Known Limitation)
+*   **Context:** `fct_ground_truth_verification_daily` compares NOAA GSOD station observations (station grain) against Open-Meteo modeled data (country grain). The modeled data is fetched at a single reference coordinate per country, while the NOAA station is the closest station to that coordinate.
+*   **Decision:** Accept the grain mismatch as a known limitation. Most countries have stations near the reference coordinate and show good model-observation agreement (>80% within 2°C tolerance).
+*   **Known Exception — Greece:** The single NOAA station (LAMIA) is located in an inland plain (Thessalian Plain) that is significantly hotter than the country-level modeled average. This results in a ~5°C systematic bias and only ~2.5% of records within tolerance for Greece. Other EU countries (France, Germany, Italy, Belgium, Netherlands) achieve 95-100% within tolerance.
+*   **Root Cause:** `weather_historical` (Open-Meteo) has no `station_id` — it is one temperature per `(country, date)`. The gold transform joins on `country + date`, comparing a station's observation against a country-wide model. Greece's diverse topography (mountains, islands, coastal areas vs inland plains) creates large within-country temperature variation.
+*   **Future Fix:** Fetch Open-Meteo data at each NOAA station's actual coordinates (requires enriching `dim_stations` with lat/lon from ISD history and creating a station-level modeled table). This would eliminate the grain mismatch for all countries.
+*   **Validation:** `TestRealWorldSanity` in `test_gold_tables.py` validates model accuracy per country and documents the Greece exception as a known limitation (see ADR #8). The test issues a warning rather than failing, as the bias is structural and expected with the current architecture.

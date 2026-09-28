@@ -4,13 +4,13 @@
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                    Current: Community Edition                    │
+│                    Current: Free Edition                         │
 ├──────────────────────────────────────────────────────────────────┤
 │  Compute:     Serverless (auto-selected)                         │
 │  Trigger:     Manual / DAB deploy                                │
 │  State:       Delta table watermarks                             │
 │  Spatial:     H3 Resolution 6 (~737 km²)                         │
-│  Testing:     pytest unit tests (69 tests)                       │
+│  Testing:     pytest unit tests (all layers)                    │
 └────────────────────────────┬─────────────────────────────────────┘
                              │
                              │ Upgrade
@@ -42,13 +42,14 @@
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-## Current State: Databricks Community/Standard Edition
+## Current State: Databricks Free Edition
 *   **Compute:** Serverless compute (auto-selected).
 *   **Ingestion:** DAB-orchestrated batch processing with watermark-based incremental loads.
 *   **Pipeline:** Job-based orchestration defined in `databricks.yml`:
-    *   `silver_infrastructure_setup` (SQL task)
-    *   `silver_data_load` (notebook task)
-    *   `silver_validation` (notebook task)
+    *   `project_bootstrap` (one-time SQL task — creates catalog, schemas, audit tables)
+    *   `silver_data_load` (notebook task — runs silver orchestrator)
+    *   `silver_validation` (notebook task — runs pytest suite)
+    *   `climate_data_pipeline` (full end-to-end: bronze validate → silver load → silver validate → gold load → gold validate)
 *   **Audit:** Delta table `climate_energy_demand.silver.ingestion_audit` tracks watermarks and row counts.
 *   **Logic:** H3 Resolution 6 to balance performance and regional precision.
 
@@ -57,4 +58,4 @@
 2.  **Increased Precision:** Scale H3 Indexing to Resolution 8 or 9 (~1 km²) for urban heat island analysis.
 3.  **Real-Time Monitoring:** Implement **Lakeflow Spark Declarative Pipelines (SDP)** for continuous data quality monitoring and automated lineage tracking.
 4.  **Precipitation Integration:** Full incorporation of global rainfall data (e.g., ERA5-Land) once a reliable Bronze source is established.
-5.  **Enhanced Testing:** Expand unit test coverage beyond Silver validation to include transform function tests and integration tests.
+5.  **Enhanced Testing:** Expand unit test coverage to include gold layer validation and end-to-end integration tests.

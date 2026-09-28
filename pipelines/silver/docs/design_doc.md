@@ -10,40 +10,52 @@ This document details the engineering decisions and physical thresholds used to 
 Modular Jobs (Run independently):
 
 ┌─────────────────────────────────────────────────────────────────┐
-│  Job 1: silver_infrastructure_setup                            │
-│  └─> Creates ingestion_audit table (idempotent)                 │
+│  Prerequisite: project_bootstrap (one-time)                     │
+│  └─> Creates catalog, schemas, audit tables, monitoring tables   │
+│      (includes setup_silver.sql — creates ingestion_audit table) │
 └─────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────┐
-│  Job 2: silver_data_load                                       │
+│  Job 1: silver_data_load                                        │
 │  └─> Runs orchestrator to load/update Silver tables            │
 │      (Run when you have new Bronze data)                        │
 └─────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────┐
-│  Job 3: silver_validation                                      │
+│  Job 2: silver_validation                                       │
 │  └─> Runs pytest tests with smart skip logic                   │
 │      ✅ Skips if no data changes since last validation          │
 │      📊 Compares audit watermarks to decide                     │
 └─────────────────────────────────────────────────────────────────┘
 
 
-Full Pipeline (chains all three for CI/CD):
+Full Pipeline (chains all layers for CI/CD):
 
 ┌─────────────────────────────────────────────────────────────────┐
-│            Job 4: climate_data_pipeline (Full)                │
+│            Job 3: climate_data_pipeline (Full)                │
 └─────────────────────────────────────────────────────────────────┘
 
    Task 1                    Task 2                    Task 3
 ┌──────────────┐         ┌──────────────┐         ┌──────────────┐
-│ setup_silver │────────>│   silver_    │────────>│  validate_   │
-│     .sql     │         │ orchestrator │         │    silver    │
-│              │         │      .py     │         │   _tables    │
-│ Creates:     │         │              │         │              │
-│ • ingestion_ │         │ Processes:   │         │ Checks:      │
-│   audit tbl  │         │ • 10 configs │         │ • Watermarks │
-└──────────────┘         │ • 10 tables  │         │ • 69 tests   │
-                         └──────────────┘         └──────────────┘
+│ validate_    │────────>│ load_silver  │────────>│ validate_   │
+│ bronze_data  │ ALL_DONE│ _data        │         │ silver_data  │
+│ (non-blocking)│        │              │         │              │
+└──────────────┘         └──────┬───────┘         └──────────────┘
+                                │
+                                ▼
+                         ┌──────────────┐
+                         │ load_gold_   │
+                         │ data         │
+                         └──────┬───────┘
+                                │
+                                ▼
+                         ┌──────────────┐
+                         │ validate_    │
+                         │ gold_data    │
+                         └──────────────┘
+
+  Note: setup_silver.sql runs as part of project_bootstrap (one-time),
+  not as a task in the full pipeline.
 ```
 
 ### File Structure
@@ -171,6 +183,21 @@ To model the energy demand required for climate control, we implement a "Neutral
 *   **The Neutral Zone:** Temperatures between 16°C and 24°C result in 0 degree days, reflecting the "comfort zone" where buildings require minimal energy for temperature regulation.
 
 **Reasoning:** 15°C is the standard residential heating activation threshold in the EU. 25°C represents the point where mechanical cooling (AC) demand begins to scale, specifically in temperate and tropical urban environments like Singapore.
+
+> **Note:** These hardcoded bases (15°C/25°C) are being replaced with dynamic climate-zone-specific thresholds in the Gold layer (see Gold design doc). The Köppen-Geiger classification drives per-zone base temperatures.
+
+## 3. Data Quality: NOAA GSOD Precipitation Sentinel
+
+**Issue:** NOAA GSOD uses `99.99` inches as the missing-data indicator for precipitation. The silver transform (`weather.py: process_weather_observations`) was not filtering this, converting it to `2539.75mm` — a physically impossible value stored as real precipitation.
+
+**Impact:** 14,952 rows (8.4%) across 148 of 221 stations (67%). Missing data is evenly spread across all 12 months (7.9–9.1% per month). 5 stations had >50% missing precipitation.
+
+**Fix:**
+- **Code:** `weather.py` now replaces `prcp = 99.99` with `NULL` before unit conversion (same pattern as temperature sentinels 9999.9/999.9).
+- **One-time data cleanup:** `UPDATE silver.weather_observations SET precip_mm = NULL WHERE precip_mm = 2539.75`
+- **Rationale for NULL over 0:** 0 means "no rain measured." NULL means "no measurement taken." Downstream aggregations (`SUM`/`AVG`) skip NULLs naturally.
+
+**Downstream impact:** Gold layer Köppen-Geiger classification (`src/transforms/climate.py`) uses monthly precipitation totals. Stations with insufficient non-NULL precipitation coverage are skipped to avoid misclassification.
 
 ## 2. Geospatial Indexing (H3)
 *   **Resolution:** Uber H3 Resolution 6 (~737 km² per cell).

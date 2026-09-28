@@ -1,6 +1,6 @@
-# Silver Layer Unit Tests & Validation
+# Pipeline Test Suite & Validation
 
-Comprehensive test suite for validating the Climate Energy Demand silver layer tables.
+Comprehensive test suite for validating the Climate Energy Demand pipeline across all layers — infrastructure, bronze, silver, and gold.
 
 ## 🚨 Data Quality Issues Caught During Testing
 
@@ -121,8 +121,10 @@ This test suite provides **intelligent, incremental validation** that only runs 
 * 🔧 **Force-Run Option**: Can force validation by deleting metadata row
 
 ### What It Validates
-- ✅ **Table Existence**: All 8 silver tables exist
-- ✅ **Table Population**: Tables contain data with reasonable row counts
+- ✅ **Infrastructure**: Catalog, schemas, and audit tables exist
+- ✅ **Bronze Tables**: Raw ingestion tables exist, populated, and data is fresh (7-day threshold)
+- ✅ **Silver Tables**: All silver tables exist with reasonable row counts
+- ✅ **Gold Tables**: All gold fact tables exist, populated, and pass business logic checks
 - ✅ **Module Imports**: All transform and utility modules load correctly
 - ✅ **Null Checks**: Key columns (primary keys) have no unexpected nulls
 - ✅ **Unit Conversions**: Temperature is in Celsius (reasonable -60°C to 60°C range)
@@ -134,7 +136,21 @@ This test suite provides **intelligent, incremental validation** that only runs 
 
 ## Test Files
 
-### 1. `test_silver_tables.py` (Main Test Suite)
+### 1. `test_infrastructure.py`
+
+Validates that the project infrastructure is correctly set up:
+- Catalog (`climate_energy_demand`) exists
+- All schemas (bronze, silver, gold, monitoring) exist
+- Audit tables (silver.ingestion_audit, gold.ingestion_audit) exist
+
+### 2. `test_bronze_tables.py`
+
+Validates bronze layer raw ingestion tables:
+- Table existence and population
+- Data freshness (7-day threshold for weather data)
+- Volume completeness checks
+
+### 3. `test_silver_tables.py` (Main Silver Test Suite)
 
 Comprehensive validation of all 8 silver tables:
 
@@ -157,7 +173,16 @@ Comprehensive validation of all 8 silver tables:
 - `TestDataQuality` - Spot checks for year ranges, dates, dimension completeness
 - `TestRelationalNormalisation` - Test wide-to-long unpivot transformation
 
-### 2. `test_audit_utils.py`
+### 4. `test_gold_tables.py`
+
+Validates gold layer fact and dimension tables:
+- Fact table existence (`fct_energy_demand_daily`, `fct_forest_resilience_annual`, `fct_ground_truth_verification_daily`)
+- Dimension table existence (`dim_date`, `dim_locations`, `dim_stations`, `dim_koppen_zones`)
+- Business logic validation (e.g., DSI ≥ 0, carbon density correctness)
+- Primary key uniqueness
+- Referential integrity with Silver layer
+
+### 5. `test_audit_utils.py`
 
 Tests for watermark and audit logging functionality:
 - Audit table existence
@@ -166,11 +191,18 @@ Tests for watermark and audit logging functionality:
 - Audit log record creation
 - Required column validation
 
-### 3. `test_shared_logic.py`
+### 6. `test_shared_logic.py`
 
 Tests for common transformation logic:
 - `calculate_thermal_stress()` - Heating/Cooling degree days
 - `relational_normalisation()` - Wide-to-long pivot
+
+### 7. `conftest.py`
+
+Shared pytest fixtures and configuration:
+- Spark session setup
+- Table name constants
+- Common test helpers
 
 ## Running Tests
 
@@ -209,12 +241,12 @@ pytest src/tests/ -v --html=test_report.html --self-contained-html
 
 ### Option 3: Interactive Notebook (Alternative)
 
-For interactive cell-by-cell execution, you can use the `run_tests` notebook:
+For interactive cell-by-cell execution, you can use the `run_all_tests_notebook` notebook:
 ```
-/Workspace/Users/<your-email>/climate-analytics/src/tests/run_tests
+/Workspace/Users/<your-email>/climate-analytics/src/tests/run_all_tests_notebook
 ```
 
-Note: This is a Databricks notebook (not `.ipynb` in the workspace), useful for interactive exploration.
+This is the same notebook invoked by the DAB validation jobs. It accepts `layer`, `job_run_id`, `job_name`, and `task_key` as base parameters.
 
 ### Option 4: Python Notebook Cell
 

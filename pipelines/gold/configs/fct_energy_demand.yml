@@ -1,0 +1,71 @@
+# =============================================================================
+# TARGET DEFINITION
+# =============================================================================
+target_table: "climate_energy_demand.gold.fct_energy_demand_daily"
+description: "Analytical fact table joining daily weather stressors with national energy demand baselines. Includes relative climatological anomalies to identify local heatwave impacts."
+
+# =============================================================================
+# SOURCE MAPPING
+# =============================================================================
+sources:
+  weather_source: "climate_energy_demand.silver.weather_historical"
+  energy_source: "climate_energy_demand.silver.energy_metrics"
+  date_dim_source: "climate_energy_demand.silver.dim_date"
+  location_dim_source: "climate_energy_demand.gold.dim_locations"
+
+# =============================================================================
+# TRANSFORMATION LOGIC
+# =============================================================================
+# Found in: src/transforms/energy.py
+module: "energy"
+function: "process_energy_demand"
+
+# =============================================================================
+# STATE & INTEGRITY
+# =============================================================================
+# No watermark needed for gold layer - processes all silver data
+watermark_column: null
+
+# Identifies a unique record by ISO Code and Date
+merge_keys:
+  - "iso_code"
+  - "date"
+
+# =============================================================================
+# PARAMETERS
+# =============================================================================
+params:
+  z_order_columns:
+    - "iso_code"
+    - "date"
+
+# =============================================================================
+# SEMANTIC METADATA (For AI/BI Genie Discovery)
+# =============================================================================
+columns:
+  - name: "iso_code"
+    comment: "ISO-3166-1 alpha-3 country code."
+  - name: "date"
+    comment: "Observation date."
+  - name: "avg_temperature_c"
+    comment: "Daily mean temperature in degrees Celsius."
+  - name: "temp_anomaly"
+    comment: "Degrees Celsius departure from the local 10-year monthly mean. Positive values indicate unseasonable heat relative to local norms."
+  - name: "is_heatwave_event"
+    comment: "Boolean flag identifying a period of sustained extreme heat relative to local climatological norms (EU/WMO standard), driving anomalous cooling demand."
+  - name: "heating_degree_days"
+    comment: "Daily thermal demand for heating using climate-zone-specific base temperature (dynamic, based on Köppen classification). Falls back to 15°C when zone is unknown."
+  - name: "cooling_degree_days"
+    comment: "Daily thermal demand for cooling using climate-zone-specific base temperature (dynamic, based on Köppen classification). Falls back to 25°C when zone is unknown."
+  - name: "heating_base_temp"
+    comment: "Heating degree day base temperature in °C used for this country's climate zone."
+  - name: "cooling_base_temp"
+    comment: "Cooling degree day base temperature in °C used for this country's climate zone."
+  - name: "annual_baseline_twh"
+    comment: "Total national electricity consumption for the associated year in Terawatt-hours."
+  - name: "generation_twh"
+    comment: "Total national electricity generation for the associated year in Terawatt-hours."
+  - name: "demand_sensitivity_index"
+    comment: "Calculated ratio of daily thermal stress (HDD+CDD) to average daily consumption. High values indicate weather-dependent grid volatility."
+  - name: "is_weekend"
+    comment: "Boolean flag identifying Saturdays and Sundays."

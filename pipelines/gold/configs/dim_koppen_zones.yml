@@ -1,0 +1,39 @@
+# =============================================================================
+# TARGET DEFINITION
+# =============================================================================
+target_table: "climate_energy_demand.gold.dim_koppen_zones"
+description: "Köppen-Geiger climate zone reference table with zone codes, descriptions, and climate-zone-specific degree-day base temperatures for dynamic HDD/CDD calculation."
+
+# =============================================================================
+# SOURCE MAPPING
+# =============================================================================
+# No silver source needed — data generated from Python dicts in climate.py
+sources: {}
+
+# =============================================================================
+# TRANSFORMATION LOGIC
+# =============================================================================
+# Found in: src/transforms/climate.py
+module: "climate"
+function: "transform_dim_koppen_zones"
+
+# =============================================================================
+# STATE & INTEGRITY
+# =============================================================================
+watermark_column: null
+
+merge_keys:
+  - "koppen_zone"
+
+# =============================================================================
+# SEMANTIC METADATA (For AI/BI Genie Discovery)
+# =============================================================================
+columns:
+  - name: "koppen_zone"
+    comment: "Köppen-Geiger climate zone code (e.g., Cfb, BWh, Af). Primary key."
+  - name: "koppen_description"
+    comment: "Human-readable climate zone name (e.g., Oceanic, Hot desert, Tropical rainforest)."
+  - name: "heating_base_temp"
+    comment: "Heating degree day base temperature in °C for this climate zone. Used for dynamic HDD calculation."
+  - name: "cooling_base_temp"
+    comment: "Cooling degree day base temperature in °C for this climate zone. Used for dynamic CDD calculation."

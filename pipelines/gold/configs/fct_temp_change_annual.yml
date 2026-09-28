@@ -1,0 +1,60 @@
+# =============================================================================
+# TARGET DEFINITION
+# =============================================================================
+target_table: "climate_energy_demand.gold.fct_temp_change_annual"
+description: "Monthly and annual temperature change anomalies from FAO, enriched with ISO codes for cross-domain joins. Provides long-term climate trend context dating back to 2010."
+
+# =============================================================================
+# SOURCE MAPPING
+# =============================================================================
+sources:
+  temp_change_source: "climate_energy_demand.silver.temp_change_annual"
+  location_dim_source: "climate_energy_demand.silver.dim_locations"
+
+# =============================================================================
+# TRANSFORMATION LOGIC
+# =============================================================================
+# Found in: src/transforms/nature.py
+module: "nature"
+function: "process_temp_change_gold"
+
+# =============================================================================
+# STATE & INTEGRITY
+# =============================================================================
+# No watermark needed for gold layer - processes all silver data
+watermark_column: null
+
+# Identifies a unique record by Country, Year, Month/Season, and Element.
+merge_keys:
+  - "iso_code"
+  - "year"
+  - "months"
+  - "element"
+
+# =============================================================================
+# PARAMETERS
+# =============================================================================
+params:
+  partition_by:
+    - "year"
+
+# =============================================================================
+# SEMANTIC METADATA (For AI/BI Genie Discovery)
+# =============================================================================
+columns:
+  - name: "iso_code"
+    comment: "ISO-3166-1 alpha-3 country code."
+  - name: "country_name"
+    comment: "Country name from FAO temperature change data."
+  - name: "year"
+    comment: "Calendar year of observation."
+  - name: "months"
+    comment: "Time period: individual months (January-December), seasonal averages (Dec-Jan-Feb, Mar-Apr-May, Jun-Jul-Aug, Sep-Oct-Nov), or Meteorological year."
+  - name: "element"
+    comment: "Measurement type: 'Temperature change' (anomaly from baseline climatology) or 'Standard Deviation'."
+  - name: "unit"
+    comment: "Unit of measurement: degrees Celsius."
+  - name: "value"
+    comment: "Temperature anomaly value in degrees Celsius. For 'Temperature change' element, positive values indicate warming above the baseline; negative values indicate cooling."
+  - name: "is_warming"
+    comment: "Boolean flag: TRUE when element is 'Temperature change' and value is positive (warming trend)."

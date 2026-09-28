@@ -1,0 +1,48 @@
+# =============================================================================
+# TARGET DEFINITION
+# =============================================================================
+target_table: "climate_energy_demand.gold.dim_locations"
+description: "Master country lookup promoted from silver to gold for star-schema join integrity. Maps national names to ISO-3166 Alpha-3 codes and FAO area codes."
+
+# =============================================================================
+# SOURCE MAPPING
+# =============================================================================
+sources:
+  dim_locations_source: "climate_energy_demand.silver.dim_locations"
+  weather_source: "climate_energy_demand.silver.weather_observations"
+
+# =============================================================================
+# TRANSFORMATION LOGIC
+# =============================================================================
+# Found in: src/transforms/climate.py
+module: "climate"
+function: "transform_gold_dim_locations"
+
+# =============================================================================
+# STATE & INTEGRITY
+# =============================================================================
+watermark_column: null
+
+merge_keys:
+  - "iso_code"
+
+# =============================================================================
+# SEMANTIC METADATA (For AI/BI Genie Discovery)
+# =============================================================================
+columns:
+  - name: "country_name"
+    comment: "Country name."
+  - name: "iso_code"
+    comment: "ISO-3166-1 alpha-3 country code."
+  - name: "fao_code"
+    comment: "FAO area code for cross-referencing FAO datasets."
+  - name: "koppen_zone"
+    comment: "Köppen-Geiger climate zone code (e.g., Cfb, BWh). NULL if insufficient data."
+  - name: "koppen_description"
+    comment: "Human-readable Köppen climate zone name (e.g., Oceanic, Hot desert)."
+  - name: "heating_base_temp"
+    comment: "Climate-zone-specific heating degree day base temperature in °C. Used for dynamic HDD calculation."
+  - name: "cooling_base_temp"
+    comment: "Climate-zone-specific cooling degree day base temperature in °C. Used for dynamic CDD calculation."
+  - name: "data_quality_flag"
+    comment: "Data quality indicator: Sufficient, Insufficient precipitation data, or No weather data."

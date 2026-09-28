@@ -1,0 +1,66 @@
+# =============================================================================
+# TARGET DEFINITION
+# =============================================================================
+target_table: "climate_energy_demand.gold.fct_forest_resilience_annual"
+description: "Annual table mapping forest carbon health against climate stressors (extreme heat) at a country grain. Combines FAO forest inventory data with Open-Meteo weather aggregates."
+
+# =============================================================================
+# SOURCE MAPPING
+# =============================================================================
+sources:
+  forest_source: "climate_energy_demand.silver.forest_inventory_annual"
+  weather_source: "climate_energy_demand.silver.weather_historical"
+  location_dim_source: "climate_energy_demand.silver.dim_locations"
+  land_cover_source: "climate_energy_demand.silver.land_cover_annual"
+
+# =============================================================================
+# TRANSFORMATION LOGIC
+# =============================================================================
+# Found in: src/transforms/nature.py
+module: "nature"
+function: "process_forest_resilience"
+
+# =============================================================================
+# STATE & INTEGRITY
+# =============================================================================
+# No watermark needed for gold layer - processes all silver data
+watermark_column: null
+
+# Identifies a unique record by country and year
+merge_keys:
+  - "iso_code"
+  - "year"
+
+# =============================================================================
+# PARAMETERS
+# =============================================================================
+params:
+  partition_by:
+    - "year"
+  z_order_columns:
+    - "iso_code"
+
+# =============================================================================
+# SEMANTIC METADATA (For AI/BI Genie Discovery)
+# =============================================================================
+columns:
+  - name: "iso_code"
+    comment: "ISO-3166-1 alpha-3 country code."
+  - name: "country_name"
+    comment: "Country name from FAO forest inventory data."
+  - name: "year"
+    comment: "Calendar year of observation."
+  - name: "forest_area_ha"
+    comment: "Total forest area in hectares (converted from FAO 1000 ha units)."
+  - name: "forest_carbon_mt"
+    comment: "Forest biomass/carbon stock in million tonnes from FAO inventory."
+  - name: "carbon_density"
+    comment: "Calculated metric: forest carbon stock per hectare. Higher values indicate denser, more carbon-rich forest."
+  - name: "extreme_heat_days_count"
+    comment: "Annual count of days where maximum temperature exceeded 30°C (WMO extreme heat threshold)."
+  - name: "avg_temp_c"
+    comment: "Annual mean temperature in degrees Celsius for the country."
+  - name: "satellite_forest_area_ha"
+    comment: "Satellite-observed tree-covered area in hectares from FAO Land Cover (WorldCover source). Used to cross-validate administrative forest area."
+  - name: "forest_area_discrepancy_pct"
+    comment: "Percentage difference between satellite-observed and administratively-reported forest area. Large discrepancies may indicate reporting gaps or deforestation not yet reflected in official inventories."

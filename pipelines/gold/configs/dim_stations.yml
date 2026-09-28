@@ -1,0 +1,44 @@
+# =============================================================================
+# TARGET DEFINITION
+# =============================================================================
+target_table: "climate_energy_demand.gold.dim_stations"
+description: "Master weather station lookup promoted from silver to gold for star-schema join integrity. Maps station IDs to names and countries."
+
+# =============================================================================
+# SOURCE MAPPING
+# =============================================================================
+sources:
+  dim_stations_source: "climate_energy_demand.silver.dim_stations"
+  weather_source: "climate_energy_demand.silver.weather_observations"
+
+# =============================================================================
+# TRANSFORMATION LOGIC
+# =============================================================================
+# Found in: src/transforms/climate.py
+module: "climate"
+function: "transform_gold_dim_stations"
+
+# =============================================================================
+# STATE & INTEGRITY
+# =============================================================================
+watermark_column: null
+
+merge_keys:
+  - "station_id"
+
+# =============================================================================
+# SEMANTIC METADATA (For AI/BI Genie Discovery)
+# =============================================================================
+columns:
+  - name: "station_id"
+    comment: "Unique weather station identifier."
+  - name: "station_name"
+    comment: "Human-readable station name."
+  - name: "country"
+    comment: "Country where the station is located."
+  - name: "koppen_zone"
+    comment: "Köppen-Geiger climate zone code (e.g., Cfb, BWh). NULL if insufficient data."
+  - name: "koppen_description"
+    comment: "Human-readable Köppen climate zone name (e.g., Oceanic, Hot desert)."
+  - name: "data_quality_flag"
+    comment: "Data quality indicator: Sufficient, Insufficient precipitation data, or No weather data."

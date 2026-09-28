@@ -1,0 +1,56 @@
+# =============================================================================
+# TARGET DEFINITION
+# =============================================================================
+target_table: "climate_energy_demand.gold.fct_land_cover_annual"
+description: "Annual national land cover by category and satellite source, enriched with ISO codes for cross-domain joins."
+
+# =============================================================================
+# SOURCE MAPPING
+# =============================================================================
+sources:
+  land_cover_source: "climate_energy_demand.silver.land_cover_annual"
+  location_dim_source: "climate_energy_demand.silver.dim_locations"
+
+# =============================================================================
+# TRANSFORMATION LOGIC
+# =============================================================================
+# Found in: src/transforms/nature.py
+module: "nature"
+function: "process_land_cover_gold"
+
+# =============================================================================
+# STATE & INTEGRITY
+# =============================================================================
+# No watermark needed for gold layer - processes all silver data
+watermark_column: null
+
+# Identifies a unique record by Country, Year, Land Cover Category, and Satellite Source.
+merge_keys:
+  - "iso_code"
+  - "year"
+  - "land_cover_category"
+  - "element"
+
+# =============================================================================
+# PARAMETERS
+# =============================================================================
+params:
+  partition_by:
+    - "year"
+
+# =============================================================================
+# SEMANTIC METADATA (For AI/BI Genie Discovery)
+# =============================================================================
+columns:
+  - name: "iso_code"
+    comment: "ISO-3166-1 alpha-3 country code."
+  - name: "country_name"
+    comment: "Country name from FAO land cover data."
+  - name: "year"
+    comment: "Calendar year of observation."
+  - name: "land_cover_category"
+    comment: "Land cover type (e.g., Tree-covered areas, Grassland, Artificial surfaces)."
+  - name: "element"
+    comment: "Satellite source (CCI_LC, CGLS, MODIS, WorldCover)."
+  - name: "area_ha"
+    comment: "Land cover area in hectares (converted from FAO 1000 ha units)."

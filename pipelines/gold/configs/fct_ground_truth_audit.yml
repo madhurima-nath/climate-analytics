@@ -1,0 +1,62 @@
+# =============================================================================
+# TARGET DEFINITION
+# =============================================================================
+target_table: "climate_energy_demand.gold.fct_ground_truth_verification_daily"
+description: "Data Quality (DQ) audit table comparing physical weather station observations (Ground Truth) against reanalysis model data (Virtual). Used to calculate model precision and bias."
+
+# =============================================================================
+# SOURCE MAPPING
+# =============================================================================
+sources:
+  physical_observations: "climate_energy_demand.silver.weather_observations" # NOAA GSOD
+  modeled_data: "climate_energy_demand.silver.weather_historical"           # Open-Meteo
+  station_dim: "climate_energy_demand.silver.dim_stations"
+
+# =============================================================================
+# TRANSFORMATION LOGIC
+# =============================================================================
+# Found in: src/transforms/quality.py
+module: "quality"
+function: "process_fidelity_audit"
+
+# =============================================================================
+# STATE & INTEGRITY
+# =============================================================================
+# No watermark needed for gold layer - processes all silver data
+watermark_column: null
+
+# Identifies a unique record by Station ID and Date
+merge_keys:
+  - "station_id"
+  - "date"
+
+# =============================================================================
+# PARAMETERS
+# =============================================================================
+params:
+  z_order_columns:
+    - "station_id"
+    - "date"
+
+# =============================================================================
+# SEMANTIC METADATA (For AI/BI Genie Discovery)
+# =============================================================================
+columns:
+  - name: "station_id"
+    comment: "Unique identifier for the physical NOAA GSOD weather station."
+  - name: "date"
+    comment: "Observation date for alignment."
+  - name: "observed_avg_temp"
+    comment: "Actual mean temperature recorded by the physical station sensor (Celsius)."
+  - name: "modeled_avg_temp"
+    comment: "Mean temperature provided by the Open-Meteo API for the nearest grid point (Celsius)."
+  - name: "absolute_error"
+    comment: "The absolute difference between physical and modeled values. Lower is better."
+  - name: "bias_error"
+    comment: "Calculated as (Modeled - Observed). Positive values indicate the model is overestimating heat; negative values indicate underestimation."
+  - name: "is_within_tolerance"
+    comment: "Boolean flag set to TRUE if absolute_error is <= 2.0°C, the acceptable threshold for regional climate modeling."
+  - name: "station_name"
+    comment: "Human-readable name of the NOAA GSOD weather station."
+  - name: "country"
+    comment: "Country where the physical station is located."

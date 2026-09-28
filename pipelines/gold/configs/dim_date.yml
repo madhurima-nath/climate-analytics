@@ -1,0 +1,45 @@
+# =============================================================================
+# TARGET DEFINITION
+# =============================================================================
+target_table: "climate_energy_demand.gold.dim_date"
+description: "Master temporal dimension promoted from silver to gold for star-schema join integrity. Includes weekend flags and EU seasonality."
+
+# =============================================================================
+# SOURCE MAPPING
+# =============================================================================
+sources:
+  dim_date_source: "climate_energy_demand.silver.dim_date"
+
+# =============================================================================
+# TRANSFORMATION LOGIC
+# =============================================================================
+# Found in: src/transforms/climate.py
+module: "climate"
+function: "transform_gold_dim_date"
+
+# =============================================================================
+# STATE & INTEGRITY
+# =============================================================================
+watermark_column: null
+
+merge_keys:
+  - "date"
+
+# =============================================================================
+# SEMANTIC METADATA (For AI/BI Genie Discovery)
+# =============================================================================
+columns:
+  - name: "date"
+    comment: "Calendar date."
+  - name: "year"
+    comment: "Calendar year."
+  - name: "month"
+    comment: "Month number (1-12)."
+  - name: "is_weekend"
+    comment: "Boolean flag for Saturdays and Sundays."
+  - name: "season"
+    comment: "EU meteorological season name."
+  - name: "heating_season"
+    comment: "Boolean flag for heating season (Oct–Mar, Northern Hemisphere convention)."
+  - name: "cooling_season"
+    comment: "Boolean flag for cooling season (Jun–Sep)."

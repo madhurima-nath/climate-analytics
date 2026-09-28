@@ -7,9 +7,9 @@ To ensure a senior-level, production-grade platform, all Gold-layer tables adher
 
 *   **Config-Driven Orchestration:** All table schemas, source mappings, and metadata are defined in YAML. Transformations are implemented in isolated Python functions.
 *   **Semantic Layer (AI/BI Readiness):** Every column is registered in Unity Catalog with a business-descriptive `COMMENT` to enable **AI/BI Genie** to perform natural language reasoning.
-*   **Performance Optimization:** 
+*   **Performance Optimisation:** 
     *   **Z-Ordering:** Tables are Z-Ordered by high-cardinality join keys (`iso_code`, `date`, `h3_cell_index`) for sub-second dashboard performance.
-    *   **Predictive Partitioning:** Annual tables are partitioned by `year` to optimize time-series lookups.
+    *   **Predictive Partitioning:** Annual tables are partitioned by `year` to optimise time-series lookups.
 *   **Observability:** Every transformation cycle triggers a log entry in `gold.ingestion_audit` capturing run-time, row-count variance, and success/fail status.
 
 ---
@@ -27,8 +27,8 @@ Quantify the relationship between daily climatic stress and national energy cons
 1.  **Broadcast Join:** Annual electricity consumption from `silver.energy_metrics` is broadcasted across daily weather records on `iso_code` and `year` to align mismatched temporal grains.
 2.  **Demand Sensitivity Index (DSI):** A calculated intensity metric:
     `DSI = (hdd + cdd) / (annual_electricity_consumption / 365)`
-    *Logic: Normalizes thermal demand (Heating/Cooling Degree Days) against the average daily baseline of the national grid.*
-3. **Climatological Normalization:** To account for geographic diversity, "Extreme Heat" is defined relatively. We calculate the temp_anomaly by comparing the daily mean against a 10-year monthly baseline for each iso_code. This ensures that energy demand spikes are analyzed in the context of local adaptation (e.g., a 25°C day in a typically 15°C region is flagged as a high-stress event). Heat stress is calculated using local monthly baselines to account for geographic adaptation, following EU/WMO standards for relative anomalies.
+    *Logic: Normalises thermal demand (Heating/Cooling Degree Days) against the average daily baseline of the national grid.*
+3. **Climatological Normalisation:** To account for geographic diversity, "Extreme Heat" is defined relatively. We calculate the temp_anomaly by comparing the daily mean against a 10-year monthly baseline for each iso_code. This ensures that energy demand spikes are analyzed in the context of local adaptation (e.g., a 25°C day in a typically 15°C region is flagged as a high-stress event). Heat stress is calculated using local monthly baselines to account for geographic adaptation, following EU/WMO standards for relative anomalies.
 
 ### 4. Key Business Metrics
 *   **Grid Volatility:** Variance of the DSI identifying countries with unhedged climate risk.

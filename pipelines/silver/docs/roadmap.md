@@ -18,7 +18,7 @@
 ┌──────────────────────────────────────────────────────────────────┐
 │              Phase 1: Standard Edition (Paid Tier)               │
 ├──────────────────────────────────────────────────────────────────┤
-│  Compute:     Job clusters (optimized sizing)                    │
+│  Compute:     Job clusters (optimised sizing)                    │
 │  Trigger:     Scheduled jobs (cron) + File arrival               │
 │  Ingestion:   Auto Loader (cloud storage events)                 │
 │  State:       Delta table watermarks + Auto Loader checkpoints   │

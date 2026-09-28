@@ -2,7 +2,7 @@
 
 ## System Overview
 
-The Gold layer is the **consumption zone** of the climate analytics platform. It transforms normalized Silver data into denormalized, analysis-ready fact tables optimized for:
+The Gold layer is the **consumption zone** of the climate analytics platform. It transforms normalised Silver data into denormalised, analysis-ready fact tables optimised for:
 
 * **Physical Climate Risk (PCR)** analysis
 * **AI/BI Genie** natural language queries
@@ -23,7 +23,7 @@ The Gold layer is the **consumption zone** of the climate analytics platform. It
 │             Gold Orchestrator (gold_orchestrator.py)       │
 │                                                              │
 │  1. Load config YAML                                         │
-│  2. Extract from Silver sources (with watermarking)          │
+│  2. Extract from Silver sources (full reload, no watermarking)  │
 │  3. Dynamic import of transformation function                │
 │  4. Execute transform (sources dict -> Gold DataFrame)       │
 │  5. Merge/Insert into Gold table                             │
@@ -36,7 +36,13 @@ The Gold layer is the **consumption zone** of the climate analytics platform. It
 │                                                              │
 │  • energy.py:   process_energy_demand()                    │
 │  • nature.py:   process_forest_resilience()               │
+│  • nature.py:   process_temp_change_gold()                │
+│  • nature.py:   process_land_cover_gold()                 │
 │  • quality.py:  process_fidelity_audit()                  │
+│  • climate.py:  transform_gold_dim_stations()             │
+│  • climate.py:  transform_gold_dim_locations()            │
+│  • climate.py:  transform_gold_dim_date()                 │
+│  • climate.py:  transform_dim_koppen_zones()              │
 └──────────────────────────────────────────────────────┘
                                |
                                v
@@ -44,8 +50,11 @@ The Gold layer is the **consumption zone** of the climate analytics platform. It
 │            Gold Fact Tables (Unity Catalog)                 │
 │                                                              │
 │  • fct_energy_demand_daily                                │
+│  • fct_temp_change_annual                                │
+│  • fct_land_cover_annual                                │
 │  • fct_forest_resilience_annual                          │
 │  • fct_ground_truth_verification_daily                   │
+│  • dim_stations, dim_locations, dim_date, dim_koppen_zones │
 └──────────────────────────────────────────────────────┘
 ```
 
@@ -134,7 +143,7 @@ physical_obs (station_id, country, date, observed_temp)
 
 ---
 
-## Performance Optimizations
+## Performance Optimisations
 
 ### Z-Ordering Strategy
 
@@ -156,7 +165,7 @@ OPTIMIZE climate_energy_demand.gold.fct_ground_truth_verification_daily
 
 **Result:** Sub-second query performance on dashboard filters
 
-### Broadcast Join Optimization
+### Broadcast Join Optimisation
 
 Annual dimension tables (< 10MB) are broadcast to all workers:
 

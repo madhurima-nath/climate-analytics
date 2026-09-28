@@ -19,7 +19,7 @@ The project is deployed via Declarative Automation Bundles:
 1. **Pipeline Orchestration**: Jobs are defined in `databricks.yml` and deployed via Declarative Automation Bundles. Each layer has modular jobs (data load + validation) that run independently, plus a full end-to-end pipeline job that chains all layers with task dependencies.
 
 2. **Execution Monitoring & Audit**: A custom audit framework tracks every pipeline run:
-   - **Pipeline Logging**: Execution metadata — including run IDs, table names, row counts, and durations — is persisted to Delta tables in `climate_energy_demand.monitoring`.
+   - **Pipeline Logging**: Execution metadata, including run IDs, table names, row counts, and durations, is persisted to Delta tables in `climate_energy_demand.monitoring`.
    - **Validation**: Automated pytest suites validate table existence, data quality, unit conversions, primary key uniqueness, and business logic across all layers.
    - **Dashboard**: An AI/BI Dashboard provides real-time visibility into pipeline health, test results, and data load outcomes.
 

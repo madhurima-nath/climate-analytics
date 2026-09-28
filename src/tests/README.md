@@ -1,6 +1,6 @@
 # Pipeline Test Suite & Validation
 
-Comprehensive test suite for validating the Climate Energy Demand pipeline across all layers — infrastructure, bronze, silver, and gold.
+Comprehensive test suite for validating the Climate Energy Demand pipeline across all layers, including infrastructure, bronze, silver, and gold.
 
 ## 🚨 Data Quality Issues Caught During Testing
 
@@ -152,7 +152,7 @@ Validates bronze layer raw ingestion tables:
 
 ### 3. `test_silver_tables.py` (Main Silver Test Suite)
 
-Comprehensive validation of all 8 silver tables:
+Comprehensive validation of all 10 silver tables:
 
 **Tables Tested:**
 1. `energy_metrics` - National energy demand, generation, GDP, population
@@ -163,6 +163,8 @@ Comprehensive validation of all 8 silver tables:
 6. `dim_date` - Date dimension calendar
 7. `dim_locations` - Country/location dimension
 8. `forest_inventory_annual` - Annual forest inventory data
+9. `land_cover_annual` - Annual land cover by category
+10. `temp_change_annual` - Temperature change anomalies
 
 **Test Classes:**
 - `TestTableExistence` - Verify all tables exist and have data
@@ -320,7 +322,7 @@ Detailed Results:
   Shared Logic: ✅ PASSED
 
 Test Coverage:
-  1. ✅ Table Existence: All 8 silver tables exist
+  1. ✅ Table Existence: All 10 silver tables exist
   2. ✅ Table Population: Tables have data
   3. ✅ Row Count Validation: Reasonable number of rows
   4. ✅ Module Imports: All transforms and utilities import correctly
@@ -341,6 +343,8 @@ Validated Tables:
    6. dim_date
    7. dim_locations
    8. forest_inventory_annual
+   9. land_cover_annual
+   10. temp_change_annual
 
 ======================================================================
 
@@ -431,7 +435,7 @@ FAILED test_silver_tables.py::test_temperature_conversion_weather_observations
 AssertionError: Maximum temperature 95.0 seems too hot (possibly still in Fahrenheit?)
 ```
 
-## Customization
+## Customisation
 
 ### Adjusting Expected Row Counts
 

@@ -39,7 +39,7 @@ To mitigate the 10-minute execution timeout enforced by the Databricks Free Edit
 
 ### A. Fault-Tolerant Checkpointing
 Ingestion notebooks for weather and stations utilize an **Append-on-Success** pattern. 
-* Granular Tracking: State is tracked at the (Country, Year) grain, identifies completed countries/years already present in the Delta table. The pipeline performs a pre-flight metadata scan of the Delta table to generate a work-queue of missing tasks. It automatically filters the ingestion queue to skip completed work.
+* Granular Tracking: State is tracked at the (Country, Year) grain, which identifies completed countries and years already present in the Delta table. The pipeline performs a pre-flight metadata scan of the Delta table to generate a work-queue of missing tasks. It automatically filters the ingestion queue to skip completed work.
 * Idempotency: This ensures that in the event of a network failure or daily API limit, the pipeline can be resumed immediately without data loss or redundant processing.
 
 ### B. API Resilience (Throttling & Backoff)
@@ -55,7 +55,7 @@ Notebook **NOAA** implements the **Haversine Formula** to find the nearest physi
 *   This is essential for accurate station selection in high-latitude regions (e.g., the Nordics) where longitudinal convergence distorts standard map-based distance calculations.
 
 ### D. Probabilistic Climate Modelling
-Notebook **CMIP6** supports the ingestion of all 7 available HighResMIP ensemble models (e.g., EC-Earth3P-HR, MRI-AGCM3-2-S). To optimise performance, the pipeline utilizes Strategic Temporal Sampling, ingesting complete years in 5-year intervals, instead of a continuous pull. This provides the necessary longitudinal resolution for Heating/Cooling Degree Day (HDD/CDD) calculations while reducing API overhead.
+Notebook **CMIP6** supports the ingestion of all 7 available HighResMIP ensemble models (e.g., EC-Earth3P-HR, MRI-AGCM3-2-S). To optimise performance, the pipeline uses Strategic Temporal Sampling, ingesting complete years in 5-year intervals, instead of a continuous pull. This provides the necessary longitudinal resolution for Heating/Cooling Degree Day (HDD/CDD) calculations while reducing API overhead.
 
 ### E. Character Encoding & Schema Sanitisation
 Notebook **FAO GFW** handles diverse international datasets from the UN (FAOSTAT) and Global Forest Watch (GFW).
@@ -66,7 +66,7 @@ Notebook **FAO GFW** handles diverse international datasets from the UN (FAOSTAT
 
 ## 5. Maintenance & Refresh
 *   **Weather:** Notebook **incremental** is designed for daily execution.
-*   **Energy/Forestry/Environmental Data:** Source CSVs in the UC Volumes needs to be updated annually by executing the respective ingestion notebooks .
+*   **Energy/Forestry/Environmental Data:** Source CSVs in the UC Volumes need to be updated annually by executing the respective ingestion notebooks.
 *   **Validation:** NOAA GSOD is a static backfill (Source cutoff: Aug 2025).
 
 ---

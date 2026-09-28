@@ -152,7 +152,7 @@ Full Pipeline (chains all layers for CI/CD):
 └──────┬──────┘  • process_energy_metrics()
        │         • process_forest_inventory()
        │
-       │  Transform & Standardize
+       │  Transform & Standardise
        │  • Unit conversion
        │  • Thermal stress calc
        │  • H3 indexing
@@ -190,7 +190,7 @@ To model the energy demand required for climate control, we implement a "Neutral
 
 **Issue:** NOAA GSOD uses `99.99` inches as the missing-data indicator for precipitation. The silver transform (`weather.py: process_weather_observations`) was not filtering this, converting it to `2539.75mm` — a physically impossible value stored as real precipitation.
 
-**Impact:** 14,952 rows (8.4%) across 148 of 221 stations (67%). Missing data is evenly spread across all 12 months (7.9–9.1% per month). 5 stations had >50% missing precipitation.
+**Impact:** 14,952 rows (8.4%) across 148 of 221 stations (67%). Missing data is evenly spread across all 12 months (7.9 to 9.1% per month). 5 stations had >50% missing precipitation.
 
 **Fix:**
 - **Code:** `weather.py` now replaces `prcp = 99.99` with `NULL` before unit conversion (same pattern as temperature sentinels 9999.9/999.9).
@@ -205,7 +205,7 @@ To model the energy demand required for climate control, we implement a "Neutral
 *   **Impact:** This enables $O(1)$ join complexity. It allows the platform to join forestry carbon flux data with historical temperature drivers without expensive "Point-in-Polygon" spatial operations.
 
 ### 2.1 Global Forest Watch Tile_ID System
-Global Forest Watch (GFW) organizes their global raster datasets using a **tile-based coordinate encoding**:
+Global Forest Watch (GFW) organises their global raster datasets using a **tile-based coordinate encoding**:
 
 *   **Format:** `{LAT}N/S_{LON}E/W` (e.g., `00N_000E`, `10N_050W`, `45S_120E`)
 *   **Tile Coverage:** Each tile represents a **10° × 10°** geographic area (~1,100 km × 1,100 km at the equator)
@@ -219,7 +219,7 @@ lat = float(parts[0][:-1]) * (1 if parts[0][-1] == "N" else -1)
 lon = float(parts[1][:-1]) * (1 if parts[1][-1] == "E" else -1)
 ```
 
-**Implementation:** Since GFW metadata tables (peatlands, carbon flux) lack explicit latitude/longitude columns, we parse the tile_id to extract center coordinates for spatial binning and aggregation. This allows us to create spatial dimensions (`dim_h3_grid`) and perform geographic joins with weather data.
+**Implementation:** Since GFW metadata tables (peatlands, carbon flux) lack explicit latitude/longitude columns, we parse the tile_id to extract centre coordinates for spatial binning and aggregation. This allows us to create spatial dimensions (`dim_h3_grid`) and perform geographic joins with weather data.
 
 ## 3. Data Persistence (Forward Fill)
 *   **Logic:** Missing temperature observations are forward-filled for a maximum of 3 consecutive days.

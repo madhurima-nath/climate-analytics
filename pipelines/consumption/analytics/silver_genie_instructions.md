@@ -1,6 +1,6 @@
 # Genie Semantic Instructions: Silver Layer
 
-> **Note**: This Genie space is for **business data queries** (energy metrics, weather observations, carbon flux, forest inventory). 
+> **Note**: This Genie space is for **business data queries** (energy metrics, weather observations, land cover, forest inventory, temperature change). 
 > For pipeline monitoring queries (test results, job status, validation outcomes), use the separate monitoring Genie space.
 
 ## Domain

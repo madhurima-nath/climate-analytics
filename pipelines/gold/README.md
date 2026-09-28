@@ -1,6 +1,6 @@
 # Gold Layer Architecture: Climate & Energy Intelligence
 
-The Gold layer is the final "Consumption Zone" of the platform. It denormalizes Silver-layer data into high-value, semantic tables optimized for **Physical Climate Risk (PCR)** analysis, **AI/BI Genie** discovery, and executive dashboards.
+The Gold layer is the final "Consumption Zone" of the platform. It denormalises Silver-layer data into high-value, semantic tables optimised for Physical Climate Risk (PCR) analysis, AI/BI Genie discovery, and executive dashboards.
 
 ## 1. Project Structure
 
@@ -21,10 +21,8 @@ gold/
 │   ├── design_doc.md                # Detailed engineering design patterns
 │   └── architecture_logic.md        # Business logic and metric definitions
 │
-├── source_to_target_mappings/       # Lineage documentation (CSV)
-│   ├── energy_climate_sensitivity_silver_gold_mapping.csv
-│   ├── forestry_climate_risk_silver_gold_mapping.csv
-│   └── climate_DQ_audit_silver_gold_mapping.csv
+├── source_to_target_mappings/       # Lineage documentation (CSV per table plus index)
+│   └── gold_source_to_target_mappings.md  # See index for full list
 │
 ├── setup_gold.sql                   # Creates gold.ingestion_audit table
 ├── gold_orchestrator.py             # Config-driven transformation runner (notebook)
@@ -43,8 +41,14 @@ The `gold_orchestrator.py` dynamically maps Gold tables to their specific transf
 | Target Table | Configuration File | Python Module | Transformation Function |
 | :--- | :--- | :--- | :--- |
 | `fct_energy_demand_daily` | `fct_energy_demand.yml` | `src.transforms.energy` | `process_energy_demand` |
-| `fct_forest_resilience_annual` | `fct_forest_resilience.yml`| `src.transforms.nature` | `process_forest_resilience` |
-| `fct_ground_truth_verification_daily`| `fct_ground_truth_audit.yml`| `src.transforms.quality`| `process_fidelity_audit` |
+| `fct_temp_change_annual` | `fct_temp_change_annual.yml` | `src.transforms.nature` | `process_temp_change_gold` |
+| `fct_land_cover_annual` | `fct_land_cover_annual.yml` | `src.transforms.nature` | `process_land_cover_gold` |
+| `fct_forest_resilience_annual` | `fct_forest_resilience.yml` | `src.transforms.nature` | `process_forest_resilience` |
+| `fct_ground_truth_verification_daily` | `fct_ground_truth_audit.yml` | `src.transforms.quality` | `process_fidelity_audit` |
+| `dim_stations` | `dim_stations.yml` | `src.transforms.climate` | `transform_gold_dim_stations` |
+| `dim_locations` | `dim_locations.yml` | `src.transforms.climate` | `transform_gold_dim_locations` |
+| `dim_date` | `dim_date.yml` | `src.transforms.climate` | `transform_gold_dim_date` |
+| `dim_koppen_zones` | `dim_koppen_zones.yml` | `src.transforms.climate` | `transform_dim_koppen_zones` |
 
 ## 3. Engineering Foundations & Observability
 
@@ -58,7 +62,7 @@ Forest resilience data is at country-year grain, joining FAO forest inventory (c
 The orchestrator records every transformation cycle into `climate_energy_demand.gold.ingestion_audit`. This ensures the pipeline is fully observable. Each entry captures:
 *   **Pipeline Lineage:** Run IDs, table names, and timestamps.
 *   **Data Integrity:** Input vs. Output row counts to identify data loss.
-*   **Performance:** Latency per transformation module for compute optimization.
+*   **Performance:** Latency per transformation module for compute optimisation.
 
 Details:
 * `run_id`: Unique UUID for the execution batch.

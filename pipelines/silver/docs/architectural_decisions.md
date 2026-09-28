@@ -116,7 +116,7 @@ Subsequent Run (Incremental):
 │  ├── weather_historical.yml                                     │
 │  ├── energy_metrics.yml                                         │
 │  ├── forest_inventory_annual.yml                                │
-│  ├── carbon_flux_spatial.yml                                    │
+│  ├── temp_change_annual.yml                                     │
 │  ├── dim_locations.yml                                          │
 │  ├── dim_date.yml                                               │
 │  └── ... (10 configs total)                                     │
@@ -330,7 +330,7 @@ Both files use the date column as a merge key. This allows for a clean join agai
 `pipelines/silver/silver_orchestrator.py` uses Delta Merge logic to ensure that your manual Bronze uploads never create duplicate records in Silver. This is the "Engine" that reads your metadata and executes the transformations.
 Key Engineering Principles in the Orchestrator:
 Dynamic Import (importlib):
-The engine doesn't know about "Weather" or "Energy." It simply reads the module and function strings from the YAML and fetches the code. This makes the system infinitely scalable—you can add a new domain just by adding a new Python file in transforms/.
+The engine doesn't know about "Weather" or "Energy." It simply reads the module and function strings from the YAML and fetches the code. This makes the system infinitely scalable. You can add a new domain just by adding a new Python file in transforms/.
 
 SQL-Based Delta Merge:
 On the Free Edition, the Python DeltaTable API can sometimes be slow. We generate a SQL Merge string dynamically using the merge_keys from your YAML. This is the most efficient way to prevent duplicate rows.
@@ -353,8 +353,8 @@ Incremental: You only process new data, respecting the Free Edition's limits.
 Idempotent Orchestration:
 By putting the setup_silver.sql and silver_orchestrator.py in the same Job, you ensure that every time the pipeline runs, it first verifies that the tables exist. This makes the system "self-healing."
 
-Single-Node Optimization:
-The configuration num_workers: 0 is the specific "Free Edition" flag. It ensures you don't try to spin up a multi-node cluster that the Community Edition would reject.
+Single-Node Optimisation:
+The configuration num_workers: 0 is the specific "Free Edition" flag. It ensures you don't try to spin up a multi-node cluster that the Free Edition would reject.
 
 Path Resolution:
 In the September 2026 environment, Databricks Asset Bundles automatically manage the "Workspace Files" for you. When you deploy this bundle, the Python script will be able to find the configs/ folder and the src/ library using the relative paths we built into the orchestrator.
@@ -387,10 +387,10 @@ Execute: Start the "Silver Layer: Master Orchestrator" job in the Databricks UI.
 
 This concludes the Silver Layer Design & Engineering Phase.
 
-## 8: Modeled vs Observed Grain Mismatch (Known Limitation)
-*   **Context:** `fct_ground_truth_verification_daily` compares NOAA GSOD station observations (station grain) against Open-Meteo modeled data (country grain). The modeled data is fetched at a single reference coordinate per country, while the NOAA station is the closest station to that coordinate.
+## 8: Modelled vs Observed Grain Mismatch (Known Limitation)
+*   **Context:** `fct_ground_truth_verification_daily` compares NOAA GSOD station observations (station grain) against Open-Meteo modelled data (country grain). The modelled data is fetched at a single reference coordinate per country, while the NOAA station is the closest station to that coordinate.
 *   **Decision:** Accept the grain mismatch as a known limitation. Most countries have stations near the reference coordinate and show good model-observation agreement (>80% within 2°C tolerance).
-*   **Known Exception — Greece:** The single NOAA station (LAMIA) is located in an inland plain (Thessalian Plain) that is significantly hotter than the country-level modeled average. This results in a ~5°C systematic bias and only ~2.5% of records within tolerance for Greece. Other EU countries (France, Germany, Italy, Belgium, Netherlands) achieve 95-100% within tolerance.
-*   **Root Cause:** `weather_historical` (Open-Meteo) has no `station_id` — it is one temperature per `(country, date)`. The gold transform joins on `country + date`, comparing a station's observation against a country-wide model. Greece's diverse topography (mountains, islands, coastal areas vs inland plains) creates large within-country temperature variation.
-*   **Future Fix:** Fetch Open-Meteo data at each NOAA station's actual coordinates (requires enriching `dim_stations` with lat/lon from ISD history and creating a station-level modeled table). This would eliminate the grain mismatch for all countries.
+*   **Known Exception, Greece:** The single NOAA station (LAMIA) is located in an inland plain (Thessalian Plain) that is significantly hotter than the country-level modelled average. This results in a ~5°C systematic bias and only ~2.5% of records within tolerance for Greece. Other EU countries (France, Germany, Italy, Belgium, Netherlands) achieve 95-100% within tolerance.
+*   **Root Cause:** `weather_historical` (Open-Meteo) has no `station_id`, it is one temperature per `(country, date)`. The gold transform joins on `country + date`, comparing a station's observation against a country-wide model. Greece's diverse topography (mountains, islands, coastal areas vs inland plains) creates large within-country temperature variation.
+*   **Future Fix:** Fetch Open-Meteo data at each NOAA station's actual coordinates (requires enriching `dim_stations` with lat/lon from ISD history and creating a station-level modelled table). This would eliminate the grain mismatch for all countries.
 *   **Validation:** `TestRealWorldSanity` in `test_gold_tables.py` validates model accuracy per country and documents the Greece exception as a known limitation (see ADR #8). The test issues a warning rather than failing, as the bias is structural and expected with the current architecture.

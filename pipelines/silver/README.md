@@ -1,6 +1,6 @@
 # Climate, Energy & Nature: Silver Layer
 
-This repository contains the engineering logic for the **Silver Layer** of the data platform. The system harmonises disparate datasets from the FAO, OWID, NOAA, and OpenMeteo into a unified, query-ready state. 
+This directory contains the engineering logic for the **Silver Layer** of the data platform. The system harmonises disparate datasets from the FAO, OWID, NOAA, and OpenMeteo into a unified, query-ready state. 
 
 ## Core Objectives
 1. **Standardisation:** Transforming raw heterogeneous Bronze datasets into consistent, metric-standardised Delta tables.
@@ -49,8 +49,8 @@ graph TD
 
 ## Implementation Logic
 ### Orchestrator
-The `silver_orchestrator.py` serves as the centralised single execution engine the Silver-layer tables. 
-By decoupling the execution logic from the individual transformation scripts, this design ensures that logging, error handling, and data-writing protocols remain consistent across the project, thereby minimising technical debt and ensuring that every table adheres to the same stringent quality standards
+The `silver_orchestrator.py` serves as the centralised single execution engine for the Silver-layer tables. 
+By decoupling the execution logic from the individual transformation scripts, this design ensures that logging, error handling, and data-writing protocols remain consistent across the project, thereby minimising technical debt and ensuring that every table adheres to the same stringent quality standards.
 
 ### Declarative Configuration (YAML)
 Pipelines are defined using YAML files to separate the intent from the implementation.

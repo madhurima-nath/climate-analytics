@@ -139,7 +139,7 @@ CREATE TABLE IF NOT EXISTS climate_energy_demand.monitoring.pipeline_runs (
 
 ### Original Design Concepts (Pages 1-4)
 
-> **Note**: These were the initial multi-page design concepts. The actual dashboard was implemented as a single consolidated page — see [Implemented Dashboard](#implemented-dashboard-single-page-monitoring-lakeview) below for the final implementation.
+> **Note**: These were the initial multi-page design concepts. The actual dashboard was implemented as a single consolidated page. See [Implemented Dashboard](#implemented-dashboard-single-page-monitoring-lakeview) below for the final implementation.
 
 ### Page 1: Overview
 
@@ -329,7 +329,7 @@ ORDER BY days_since_last_run DESC;
 
 **Dashboard File**: `dashboard/Climate Analysis Dashboard.lvdash.json` (in the Declarative Automation Bundle root)
 
-**Status**: ✅ Implemented and rendering — single page ("1. Monitoring") with 5 datasets, 17 widgets
+**Status**: Implemented and rendering, single page ("1. Monitoring")
 
 ---
 
@@ -469,9 +469,9 @@ ORDER BY ts.table_name;
 - API-sourced tables (noaa_gsod, openmeteo_weather, openmeteo_climate_cmip6_projections) labeled as "API (...)" with descriptive source name
 
 **Widget configuration**:
-- **rowsPerPage: 21** — Shows all 21 bronze tables at once with no pagination (Bronze is static inventory, not pipeline execution runs like Silver/Gold)
+- **rowsPerPage: 21** shows all 21 bronze tables at once with no pagination (Bronze is static inventory, not pipeline execution runs like Silver/Gold)
 - **Column widths**: Table 280px, Row Count 100px (right-aligned), Source File 220px
-- **Why no "Latest Run"?**: Bronze layer shows static table inventory. Silver and Gold widgets track pipeline execution runs (Latest Run concept), but Bronze does not have orchestration runs—only validation.
+- **Why no "Latest Run"?**: Bronze layer shows static table inventory. Silver and Gold widgets track pipeline execution runs (Latest Run concept), but Bronze does not have orchestration runs, only validation.
 
 **Used by widget**: Bronze Table Details
 
@@ -487,7 +487,7 @@ Latest test suite execution with stakeholder-friendly presentation: test names h
 - Test names human-readable via CASE statement (e.g., `test_pipeline_runs_has_orchestrator_columns` → "Monitoring Tables Schema Check", `test_catalog_exists` → "Climate Energy Demand Catalog Exists", `test_schemas_exist` → "All Required Schemas Exist (Bronze, Silver, Gold, Monitoring)", fallback uses `INITCAP(REPLACE(REPLACE(test_name, 'test_', ''), '_', ' '))`)
 - Status shown as pass/fail icons (✅ Pass / ❌ Fail / INITCAP(status))
 - Error Type uses source `error_type` when available; infers from `error_message` pattern when NULL for failed tests (AttributeError, AssertionError, KeyError, ValueError, TypeError, fallback "Error"); "N/A" for passing tests
-- Details are short summaries — extracts description before colon for stale-tables errors, uses descriptive summary for schema errors, truncates unknown errors with ellipsis. "N/A" for passing tests. Never displays raw verbatim error messages.
+- Details are short summaries, extracts description before colon for stale-tables errors, uses descriptive summary for schema errors, truncates unknown errors with ellipsis. "N/A" for passing tests. Never displays raw verbatim error messages.
 
 **Used by widgets**: Bronze Validation, Silver Validation, Gold Validation, Infrastructure Validation (all filtered to respective layer)
 
@@ -523,31 +523,31 @@ Table counts and latest refresh dates per medallion layer.
 
 ---
 
-#### Canvas Layout — Single Page ("1. Monitoring")
+#### Canvas Layout, Single Page ("1. Monitoring")
 
 No top filter bar. All three layers display simultaneously in side-by-side columns.
 
-**Row 0**: Layer headers (text widgets) — Bronze (col 0), Silver (col 4), Gold (col 8), each w4.
+**Row 0**: Layer headers (text widgets): Bronze (col 0), Silver (col 4), Gold (col 8), each w4.
 
 **KPI Counters**: Table count and latest refresh date per layer (6 counter widgets from `ds_table_kpis`).
 
-**Rows 1-3**: Run Info (table widgets from `ds_latest_pipeline_run`) — each shows Task Type, Run Time (UTC), Result, status, duration_seconds, configs_completed, configs_skipped, configs_failed, filtered to the column's layer.
+**Rows 1-3**: Run Info (table widgets from `ds_latest_pipeline_run`), each shows Task Type, Run Time (UTC), Result, status, duration_seconds, configs_completed, configs_skipped, configs_failed, filtered to the column's layer.
 
 **Rows 4-10**: Per-Table Details:
-- **Bronze** (from `bronze_details` dataset): Static inventory of all 21 bronze tables showing row counts and source file paths. Single scrollable table (rowsPerPage: 21) with no pagination—Bronze is static data, not pipeline runs.
+- **Bronze** (from `bronze_details` dataset): Static inventory of all 21 bronze tables showing row counts and source file paths. Single scrollable table (rowsPerPage: 21) with no pagination, Bronze is static data, not pipeline runs.
 - **Silver and Gold** (from `ds_per_table_details`): Individual table-level completed/skipped status from latest orchestration run.
 
-**Validation sections**: Bronze Validation (expanded, height 8), Silver Validation, Gold Validation — test results from `ds_latest_test_results`, filtered to each layer. Columns: Validation, Result, Error Type, Details.
+**Validation sections**: Bronze Validation (expanded, height 8), Silver Validation, Gold Validation, test results from `ds_latest_test_results`, filtered to each layer. Columns: Validation, Result, Error Type, Details.
 
-**Infrastructure Validation** — test results from `ds_latest_test_results`, filtered to infrastructure/non-layer tests.
+**Infrastructure Validation**: test results from `ds_latest_test_results`, filtered to infrastructure/non-layer tests.
 
 #### Presentation Rules
 
-1. Column headers properly capitalized (Validation, Result, Error Type, Details) — no raw SQL field names
+1. Column headers properly capitalised (Validation, Result, Error Type, Details), no raw SQL field names
 2. Test names human-readable via INITCAP + REPLACE (e.g., "Schemas Exist" not "test_schemas_exist"). Specific overrides for unclear names (e.g., "Monitoring Tables Schema Check" for test_pipeline_runs_has_orchestrator_columns)
-3. Status shown as pass/fail icons — not raw "passed"/"failed"
+3. Status shown as pass/fail icons, not raw "passed"/"failed"
 4. Error Type uses source error_type when available; infers from error message pattern when NULL for failed tests (AttributeError, AssertionError, KeyError, ValueError, TypeError, fallback "Error"); "N/A" for passing tests
-5. Details are short summaries — extracts description before colon for stale-tables errors, uses descriptive summary for schema errors, truncates unknown errors to 80 chars with ellipsis. "N/A" for passing tests. Never displays raw verbatim error messages.
+5. Details are short summaries, extracts description before colon for stale-tables errors, uses descriptive summary for schema errors, truncates unknown errors to 80 chars with ellipsis. "N/A" for passing tests. Never displays raw verbatim error messages.
 
 #### Widget-Scoped Filters
 
@@ -579,13 +579,13 @@ Each widget filters by layer using widget-scoped predicates (no page-level filte
 
 #### Current Data State
 
-- **Bronze** — 1 run (validation, completed, 91s). 9 test results: 7 pass, 2 fail (Bronze Data Freshness / Schemas Exist). Config counts NULL (validation task, no orchestration). Bronze Table Details widget shows static inventory of all 21 bronze tables with row counts (formatted with commas) and full source file paths ("bronze/raw_uploads/..." for file-based, "API (...)" for API-sourced tables). No pagination (rowsPerPage: 21).
-- **Silver** — 1 run (validation, completed). Per-table details NULL. 0 test results in latest execution.
-- **Gold** — 0 rows (no gold layer pipeline runs logged yet).
+- **Bronze**: 1 run (validation, completed, 91s). 9 test results: 7 pass, 2 fail (Bronze Data Freshness / Schemas Exist). Config counts NULL (validation task, no orchestration). Bronze Table Details widget shows static inventory of all 21 bronze tables with row counts (formatted with commas) and full source file paths ("bronze/raw_uploads/..." for file-based, "API (...)" for API-sourced tables). No pagination (rowsPerPage: 21).
+- **Silver**: 1 run (validation, completed). Per-table details NULL. 0 test results in latest execution.
+- **Gold**: 0 rows (no gold layer pipeline runs logged yet).
 
 #### Dashboard Source File Location & Bundle Registration
 
-The dashboard `.lvdash.json` file lives in the DABs bundle at `dashboard/Climate Analysis Dashboard.lvdash.json`. All 4 SQL datasets are embedded directly in this file — no external SQL files are required. The file is tracked in Git alongside the rest of the bundle.
+The dashboard `.lvdash.json` file lives in the DABs bundle at `dashboard/Climate Analysis Dashboard.lvdash.json`. All SQL datasets are embedded directly in this file, no external SQL files are required. The file is tracked in Git alongside the rest of the bundle.
 
 The dashboard is registered as a `dashboards:` resource in `databricks.yml`:
 
@@ -602,17 +602,17 @@ resources:
 
 Git tracking alone version-controls the file, but registering it as a bundle resource adds lifecycle management:
 
-1. **One-command deployment** — `bundle deploy` pushes the dashboard to the workspace alongside all jobs. Without YAML registration, the `.lvdash.json` must be manually re-imported/published on every change.
-2. **CI/CD integration** — A single `bundle deploy` in an automated pipeline (GitHub Actions, etc.) updates everything — jobs and dashboards — with no separate dashboard step.
-3. **Environment promotion** — With multiple targets (e.g., dev/prod), the bundle can deploy the same dashboard to different workspaces, potentially parameterized with different variables (e.g., a different catalog name via `${var.catalog}`).
-4. **Validation** — `bundle validate --strict` catches schema/config issues in the dashboard definition before deployment, just like it does for jobs.
-5. **Variable substitution** — Bundle variables (e.g., `${var.warehouse_id}`) can be referenced in the dashboard resource definition, parameterizing it per target.
+1. **One-command deployment**: `bundle deploy` pushes the dashboard to the workspace alongside all jobs. Without YAML registration, the `.lvdash.json` must be manually re-imported/published on every change.
+2. **CI/CD integration**: A single `bundle deploy` in an automated pipeline (GitHub Actions, etc.) updates everything, jobs and dashboards, with no separate dashboard step.
+3. **Environment promotion**: With multiple targets (e.g., dev/prod), the bundle can deploy the same dashboard to different workspaces, potentially parameterised with different variables (e.g., a different catalog name via `${var.catalog}`).
+4. **Validation**: `bundle validate --strict` catches schema/config issues in the dashboard definition before deployment, just like it does for jobs.
+5. **Variable substitution**: Bundle variables (e.g., `${var.warehouse_id}`) can be referenced in the dashboard resource definition, parameterising it per target.
 
-**Impact on existing resources**: Adding a `dashboards:` block is independent of the `jobs:` block. `bundle deploy` re-deploys jobs only if their definitions changed; since no job entries were modified, existing pipelines remain untouched. `bundle run` is resource-specific — deploying a dashboard does not trigger any job to run.
+**Impact on existing resources**: Adding a `dashboards:` block is independent of the `jobs:` block. `bundle deploy` re-deploys jobs only if their definitions changed; since no job entries were modified, existing pipelines remain untouched. `bundle run` is resource-specific, deploying a dashboard does not trigger any job to run.
 
 #### Streamlit Note
 
-The entire Lakeview dashboard design — including all 5 datasets (`ds_latest_pipeline_run`, `bronze_details`, `ds_latest_test_results`, `ds_per_table_details`, `ds_table_kpis`), the 3-column layout, KPI counters, run info tables, per-table details (Bronze: static 21-table inventory; Silver/Gold: dynamic orchestration breakdown), validation tables with human-readable test names and summarized error details, and all SQL queries — must be replicated in the Streamlit app. See the Streamlit section below for replication requirements.
+The entire Lakeview dashboard design, including all datasets (`ds_latest_pipeline_run`, `bronze_details`, `ds_latest_test_results`, `ds_per_table_details`, `ds_table_kpis`), the 3-column layout, KPI counters, run info tables, per-table details (Bronze: static 21-table inventory; Silver/Gold: dynamic orchestration breakdown), validation tables with human-readable test names and summarised error details, and all SQL queries, must be replicated in the Streamlit app. See the Streamlit section below for replication requirements.
 
 ---
 
@@ -622,7 +622,7 @@ The entire Lakeview dashboard design — including all 5 datasets (`ds_latest_pi
 
 Provide external stakeholders (non-Databricks users) with read-only access to pipeline monitoring.
 
-> **⚠️ Replication Requirement**: The entire Lakeview dashboard design — including all 5 datasets (`ds_latest_pipeline_run`, `bronze_details`, `ds_latest_test_results`, `ds_per_table_details`, `ds_table_kpis`), the single-page 3-column layout, KPI counters (table counts + refresh dates), run info tables, per-table details (Bronze: static 21-table inventory with full source paths; Silver/Gold: dynamic orchestration breakdown), validation tables with human-readable test names and summarized error details, and all SQL queries — must be replicated in this Streamlit app. External stakeholders should see the same information and layout as the Lakeview dashboard.
+> **⚠️ Replication Requirement**: The entire Lakeview dashboard design, including all datasets (`ds_latest_pipeline_run`, `bronze_details`, `ds_latest_test_results`, `ds_per_table_details`, `ds_table_kpis`), the single-page 3-column layout, KPI counters (table counts + refresh dates), run info tables, per-table details (Bronze: static 21-table inventory with full source paths; Silver/Gold: dynamic orchestration breakdown), validation tables with human-readable test names and summarised error details, and all SQL queries, must be replicated in this Streamlit app. External stakeholders should see the same information and layout as the Lakeview dashboard.
 
 ### Architecture
 
@@ -764,12 +764,12 @@ WHERE layer = 'gold'  -- Just add this filter
 - Bronze, Silver, and Gold validation tests
 - Error parsing (ANSI stripping, component extraction)
 - Complete test tracking (all tests recorded)
-- Lakeview Dashboard (single page, 5 datasets, 17 widgets — fully implemented and rendering)
-  - ds_latest_pipeline_run — latest 2 runs per layer/task_type
-  - bronze_details — static inventory of all 21 bronze tables (row counts via UNION ALL COUNT(*), source file paths with "bronze/raw_uploads/" prefix for file-based tables and "API (...)" labels for API-sourced tables)
-  - ds_latest_test_results — latest test suite with human-readable names and summarized errors
-  - ds_per_table_details — per-table load breakdown (completed/skipped) for Silver/Gold via REGEXP + LATERAL VIEW EXPLODE
-  - ds_table_kpis — table counts and latest refresh dates per medallion layer
+- Lakeview Dashboard (single page, fully implemented and rendering)
+  - ds_latest_pipeline_run: latest 2 runs per layer/task_type
+  - bronze_details: static inventory of all 21 bronze tables (row counts via UNION ALL COUNT(*), source file paths with "bronze/raw_uploads/" prefix for file-based tables and "API (...)" labels for API-sourced tables)
+  - ds_latest_test_results: latest test suite with human-readable names and summarised errors
+  - ds_per_table_details: per-table load breakdown (completed/skipped) for Silver/Gold via REGEXP + LATERAL VIEW EXPLODE
+  - ds_table_kpis: table counts and latest refresh dates per medallion layer
   - KPI counter widgets (table counts + refresh dates per layer)
   - Infrastructure Validation widget
   - Dashboard file tracked in Git at `dashboard/Climate Analysis Dashboard.lvdash.json`

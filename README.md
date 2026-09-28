@@ -1,27 +1,27 @@
 # Climate Analytics
 
 ## Overview
-This repository contains a modular, end-to-end climate data pipeline built on Databricks. It is designed to ingest multi-source raw climate data and transform it into high-fidelity, queryable assets for natural language inquiry and automated reporting.
+This repository contains a modular, end-to-end climate data pipeline built on Databricks. It ingests multi-source raw climate, energy, and environmental data and transforms it into high-fidelity, queryable assets for AI/BI Dashboards and Genie natural language inquiry.
 
 ## Data Lifecycle: Medallion Architecture
 The data flows through three distinct layers, ensuring data integrity from ingestion to insight:
-1. **Bronze (Ingestion)**: Raw data ingestion from multiple climate sources (Notebooks).
-2. **Silver (Standardisation)**:  Focused on unit normalisation, temporal alignment, and cross-source cleaning.
-3. **Gold (Analytics)**: Aggregated datasets optimised and curated for AI/BI Dashboards and Genie AI inquiries.
+1. **Bronze (Ingestion)**: Raw data ingestion from multiple climate sources (Open-Meteo, OWID, NOAA GSOD, FAOSTAT, Global Forest Watch) via source-specific notebooks.
+2. **Silver (Standardisation)**: Unit normalisation, temporal alignment, cross-source cleaning, and dimensional harmonisation driven by YAML configs and Python transform modules.
+3. **Gold (Analytics)**: Denormalised, analysis-ready fact tables optimised for Physical Climate Risk (PCR) analysis, AI/BI Dashboards, and Genie natural language queries.
 
 ## Infrastructure as Code (IaC)
-To ensure reproducibility, the project is structured for *Databricks Asset Bundles (DABs)*:
-- **Deployment**: Resource mappings and environment settings are centrally defined in `databricks.yml`.
-- **Modularity**: A `src/` directory serves as a placeholder for refactoring shared logic (e.g. mathematical models or schemas) into `.py` modules as the system matures.
+The project is deployed via Declarative Automation Bundles:
+- **Deployment**: Resource mappings, jobs, dashboards, and environment settings are centrally defined in `databricks.yml`.
+- **Modularity**: The `src/` directory contains shared Python modules for transforms (`src/transforms/`), utilities (`src/common/`), and tests (`src/tests/`).
 
 ## Operational Framework
-Given the functional limitations of the *Databricks Free Tier*, the follwing steps are implemented to maintain production-grade standards.
 
-1. *Pipeline Orchestration*:  In the absence of Serverless Workflows (Jobs) or Delta Live Tables (DLT), a Master Orchestrator Notebook is utilised. This script programmatically manages the dependency graph and triggers pipeline stages in the correct sequence, simulating a standard Directed Acyclic Graph (DAG).
+1. **Pipeline Orchestration**: Jobs are defined in `databricks.yml` and deployed via Declarative Automation Bundles. Each layer has modular jobs (data load + validation) that run independently, plus a full end-to-end pipeline job that chains all layers with task dependencies.
 
-2. *Execution Monitoring & Audit*: Since enterprise System Tables are unavailable, a custom Audit Framework has been developed:
-- Pipeline Logging: Execution metadata—including notebook identity, run duration, and row counts—is persisted to a telemetry_audit Delta table.
-- Validation: Placeholder cells for schema enforcement and anomaly detection are integrated to maintain data provenance.
+2. **Execution Monitoring & Audit**: A custom audit framework tracks every pipeline run:
+   - **Pipeline Logging**: Execution metadata — including run IDs, table names, row counts, and durations — is persisted to Delta tables in `climate_energy_demand.monitoring`.
+   - **Validation**: Automated pytest suites validate table existence, data quality, unit conversions, primary key uniqueness, and business logic across all layers.
+   - **Dashboard**: An AI/BI Dashboard provides real-time visibility into pipeline health, test results, and data load outcomes.
 
 ## Job Execution & Prerequisites
 
@@ -33,42 +33,62 @@ Run `project_bootstrap` **once** before any pipeline job. This creates the catal
 
 ### Pipeline Jobs
 
-Three options exist after bootstrap:
+Four options exist after bootstrap:
 
 | Job | What it does | When to use |
 | --- | --- | --- |
-| `climate_data_pipeline` | Chains: silver load → silver validate → gold load → gold validate | Full end-to-end run, CI/CD |
-| `silver_data_load` + `silver_validation` | Silver orchestrator only, then validation | When only bronze data changed |
+| `climate_data_pipeline` | Chains: bronze validate → silver load → silver validate → gold load → gold validate | Full end-to-end run, CI/CD |
+| `bronze_validation` | Runs bronze layer data quality tests | After new bronze data uploads |
+| `silver_data_load` + `silver_validation` | Silver orchestrator only, then validation | When bronze data changed |
 | `gold_data_load` + `gold_validation` | Gold orchestrator only, then validation | When re-running gold transforms |
 
-The modular jobs (`silver_data_load`, `gold_data_load`, etc.) are decoupled -- trigger each manually. The full pipeline chains everything with task dependencies so a single trigger runs all four steps in sequence.
+The modular jobs are decoupled — trigger each manually. The full pipeline chains everything with task dependencies so a single trigger runs all steps in sequence. Bronze validation uses `run_if: ALL_DONE` so stale data is flagged without blocking the pipeline.
 
 ### Monitoring
 
-All job runs are tracked in `climate_energy_demand.monitoring` tables: `orchestrator_summary` (pipeline runs), `pipeline_runs` (bundle job status), `setup_status` (bootstrap verification), and `test_results` (validation outcomes). See `pipelines/consumption/monitoring/design_doc.md` for the dashboard build guide.
+All job runs are tracked in `climate_energy_demand.monitoring` tables: `pipeline_runs` (job execution tracking with per-table detail) and `test_results` (individual test outcomes with clean error parsing). Bootstrap verification is handled by `setup/verify_bootstrap.sql`. See `pipelines/consumption/monitoring/design_doc.md` for the full schema and dashboard build guide.
 
 ## Intelligence Layer (AI/BI & Genie)
 The final delivery layer leverages Databricks AI/BI Dashboards and the Genie semantic agent.
-- *Semantic Context*: The Gold layer includes version-controlled "Instructions" and metadata, enabling stakeholders to perform natural language inquiries (e.g. "Identify the five-year warming trend for coastal regions").
-- *Asset Management*: Dashboard definitions and semantic aliases are stored as code within the reporting/ directory.
+- **Semantic Context**: Every Gold and Silver table includes column-level comments auto-registered in Unity Catalog, enabling stakeholders to perform natural language inquiries (e.g. "Identify the five-year warming trend for coastal regions").
+- **Asset Management**: The AI/BI Dashboard definition is version-controlled as a `.lvdash.json` file in the `dashboard/` directory and deployed as a bundle resource.
+- **Genie Instructions**: Domain-specific Genie instructions are maintained in `pipelines/consumption/analytics/`.
 
 
 ## Repository Structure
 ```
 climate-analytics
-├── databricks.yml          # IaC Bundle Manifest
-├── pipelines/              
-│   ├── 01_bronze/          # Ingestion Notebooks (Source-Specific)
-│   ├── 02_silver/          # Standardisation & Cleaning (Drafts)
-│   └── 03_gold/            # Aggregated Analytics Tables (Drafts)
-├── orchestration/          # Master Script for pipeline execution
-├── src/                    # [Placeholder] For shared .py logic and schemas
-├── reporting/              # AI/BI Dashboard exports & Genie context
-├── requirements.txt        # Python dependencies (e.g. databricks-cli)
+├── databricks.yml              # Declarative Automation Bundle manifest
+├── setup/                       # Infrastructure bootstrap SQL scripts
+├── pipelines/
+│   ├── bronze/                  # Ingestion notebooks (source-specific)
+│   │   └── notebooks/
+│   ├── silver/                  # Standardisation & cleaning
+│   │   ├── configs/              # YAML declarative table definitions
+│   │   ├── docs/                 # Design, architectural decisions, roadmap
+│   │   ├── silver_orchestrator.py
+│   │   └── setup_silver.sql
+│   ├── gold/                    # Aggregated analytics fact tables
+│   │   ├── configs/              # YAML table definitions (facts + dimensions)
+│   │   ├── docs/                 # Design doc and architecture logic
+│   │   ├── source_to_target_mappings/  # Lineage CSVs (Silver → Gold)
+│   │   ├── gold_orchestrator.py
+│   │   └── setup_gold.sql
+│   └── consumption/
+│       ├── monitoring/          # Monitoring table setup + dashboard design doc
+│       └── analytics/            # Genie semantic instructions
+├── src/
+│   ├── transforms/              # Domain-specific transformation modules
+│   ├── common/                   # Shared utilities (audit, shared logic)
+│   └── tests/                    # pytest suites (bronze, silver, gold, infrastructure)
+├── dashboard/                   # AI/BI Dashboard (.lvdash.json)
+├── requirements.txt             # Python dependencies
 └── README.md
 ```
 
-- `pipelines/`: Contains the core transformation logic separated by Medallion tier.
-- `src/`: [Placeholder] Reserved for refactoring shared logic into Python modules (.py) as the project matures.
-- `reporting/`: Configuration files for AI/BI Dashboards and Genie natural language instructions.
-- `requirements.txt`: List of Python libraries required for the Databricks cluster.
+- `pipelines/`: Core transformation logic separated by Medallion tier, plus the consumption/monitoring layer.
+- `src/transforms/`: Python modules implementing the transformation logic for each domain (energy, weather, climate, nature, quality).
+- `src/common/`: Shared utilities including audit watermarking and common transformation logic.
+- `src/tests/`: Automated pytest suites validating infrastructure, bronze, silver, and gold layers.
+- `dashboard/`: Version-controlled AI/BI Dashboard definition deployed as a bundle resource.
+- `requirements.txt`: Python libraries required for the project.

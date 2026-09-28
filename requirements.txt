@@ -1,12 +1,15 @@
 # Infrastructure
-databricks-cli              # For Bundle management (IaC)
+# Databricks CLI is bundled with the Databricks environment — no separate install needed
+# For local development, install: pip install databricks-cli
 
 # Core Science & Engineering
 pyspark
-delta-spark
 numpy
 pandas
 
-# Placeholders
+# Testing
+pytest
+pytest-html
+
+# Future placeholders
 # [Add climate libraries as required, e.g. xarray, geopandas]
-# [Add validation libraries, e.g. pydantic]

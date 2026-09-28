@@ -5,7 +5,7 @@
 # ///
 # DBTITLE 1,Setup and Imports
 # Location: src/tests/run_all_tests_notebook.py
-# Purpose: Test runner notebook for Silver Layer validation
+# Purpose: Test runner notebook for Bronze/Silver/Gold layer validation
 # Usage: Run this notebook in a Databricks job
 
 import sys
@@ -161,8 +161,12 @@ def should_run_validation():
     if layer == "bronze":
         return True, "Bronze validation - manual layer, always run checks"
     
+    # Gold tables always load each run — always validate, no staleness check needed
+    if layer == "gold":
+        return True, "Gold validation — tables always load each run, always validate"
+    
     try:
-        audit_table = "climate_energy_demand.silver.ingestion_audit"
+        audit_table = f"climate_energy_demand.{layer}.ingestion_audit"
         
         # Check if audit table exists
         if not spark.catalog.tableExists(audit_table):
@@ -249,8 +253,32 @@ if layer == "bronze":
             "html_report": None
         }
     ]
-else:
-    suite_title = f"{layer.upper()} LAYER TEST SUITE"
+elif layer == "gold":
+    suite_title = "GOLD LAYER TEST SUITE"
+    test_suites = [
+        {
+            "name": "Infrastructure Validation",
+            "file": "test_infrastructure.py",
+            "html_report": None
+        },
+        {
+            "name": "Gold Table Validation",
+            "file": "test_gold_tables.py",
+            "html_report": "test_report_gold.html"
+        },
+        {
+            "name": "Audit Utils",
+            "file": "test_audit_utils.py",
+            "html_report": None
+        },
+        {
+            "name": "Shared Logic",
+            "file": "test_shared_logic.py",
+            "html_report": None
+        }
+    ]
+elif layer == "silver":
+    suite_title = "SILVER LAYER TEST SUITE"
     test_suites = [
         {
             "name": "Infrastructure Validation",
@@ -357,7 +385,19 @@ for suite_name, exit_code in results.items():
     print(f"  {suite_name}: {status}")
 
 print("\nTest Coverage:")
-print("""  1. ✅ Table Existence: All 8 silver tables exist
+if layer == "gold":
+    print("""  1. ✅ Table Existence: All 9 gold tables (4 dim + 5 fact) exist
+  2. ✅ Audit Table: Gold ingestion_audit table exists
+  3. ✅ Table Population: Tables have data
+  4. ✅ Row Count Validation: Reasonable number of rows
+  5. ✅ Module Imports: All gold transform modules import correctly (including climate)
+  6. ✅ Null Checks: Key columns have no unexpected nulls
+  7. ✅ Business Logic: Dynamic HDD/CDD, DSI, temp anomaly, carbon density, error metrics validated
+  8. ✅ Primary Key Deduplication: No duplicate keys
+  9. ✅ Data Quality: Date ranges, is_warming flag, area conversions validated
+ 10. ✅ Köppen Zones: Climate classification, data quality flags, base temp referential integrity""")
+elif layer == "silver":
+    print("""  1. ✅ Table Existence: All 10 silver tables exist
   2. ✅ Table Population: Tables have data
   3. ✅ Row Count Validation: Reasonable number of rows
   4. ✅ Module Imports: All transforms and utilities import correctly
@@ -368,13 +408,26 @@ print("""  1. ✅ Table Existence: All 8 silver tables exist
   9. ✅ MERGE Logic: Audit log updated correctly
   10. ✅ Data Quality: Year ranges, date ranges, completeness checks
   11. ✅ Relational Normalisation: Wide-to-long unpivot works""")
+else:
+    print(f"  Layer: {layer} — see test output above for details")
 
 print("\nValidated Tables:")
-tables = [
-    "energy_metrics", "weather_observations", "weather_projections",
-    "weather_historical", "dim_stations", "dim_date",
-    "dim_locations", "forest_inventory_annual"
-]
+if layer == "gold":
+    tables = [
+        "dim_date", "dim_koppen_zones", "dim_locations", "dim_stations",
+        "fct_energy_demand_daily", "fct_forest_resilience_annual",
+        "fct_ground_truth_verification_daily", "fct_temp_change_annual",
+        "fct_land_cover_annual"
+    ]
+elif layer == "silver":
+    tables = [
+        "energy_metrics", "weather_observations", "weather_projections",
+        "weather_historical", "dim_stations", "dim_date",
+        "dim_locations", "forest_inventory_annual",
+        "land_cover_annual", "temp_change_annual"
+    ]
+else:
+    tables = []
 for i, table in enumerate(tables, 1):
     print(f"  {i:2d}. {table}")
 
@@ -402,6 +455,7 @@ for suite_name, test_name, passed, fail_msg in all_test_details:
         "Infrastructure Validation": "test_infrastructure.py",
         "Bronze Table Validation": "test_bronze_tables.py",
         "Silver Table Validation": "test_silver_tables.py",
+        "Gold Table Validation": "test_gold_tables.py",
         "Audit Utils": "test_audit_utils.py",
         "Shared Logic": "test_shared_logic.py"
     }
@@ -479,7 +533,7 @@ else:
 from datetime import datetime
 
 try:
-    audit_table = "climate_energy_demand.silver.ingestion_audit"
+    audit_table = f"climate_energy_demand.{layer}.ingestion_audit"
     current_time = datetime.now()
     
     # Check if validation metadata row exists
@@ -536,7 +590,7 @@ if failed_suites == 0:
     print("="*80)
     print(f"\n   Total Test Suites: {total_suites}")
     print(f"   All {passed_suites} test suites passed successfully")
-    print(f"\n   Silver Layer data quality validated ✓")
+    print(f"\n   {layer.title()} Layer data quality validated ✓")
     print("\n" + "="*80)
     
     # Exit successfully

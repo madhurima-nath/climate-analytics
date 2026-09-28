@@ -22,7 +22,7 @@ from src.common.shared_logic import calculate_thermal_stress, relational_normali
 # TABLE DEFINITIONS
 # =============================================================================
 
-# All 8 silver tables that should exist
+# All 10 silver tables that should exist
 EXPECTED_SILVER_TABLES = [
     "climate_energy_demand.silver.energy_metrics",
     "climate_energy_demand.silver.weather_observations",
@@ -31,7 +31,9 @@ EXPECTED_SILVER_TABLES = [
     "climate_energy_demand.silver.dim_stations",
     "climate_energy_demand.silver.dim_date",
     "climate_energy_demand.silver.dim_locations",
-    "climate_energy_demand.silver.forest_inventory_annual"
+    "climate_energy_demand.silver.forest_inventory_annual",
+    "climate_energy_demand.silver.land_cover_annual",
+    "climate_energy_demand.silver.temp_change_annual"
 ]
 
 # Key columns that should not be null for each table
@@ -43,7 +45,9 @@ KEY_COLUMNS = {
     "climate_energy_demand.silver.dim_stations": ["station_id"],
     "climate_energy_demand.silver.dim_date": ["date"],
     "climate_energy_demand.silver.dim_locations": ["iso_code"],
-    "climate_energy_demand.silver.forest_inventory_annual": ["country_name", "land_use_category", "unit", "year"]
+    "climate_energy_demand.silver.forest_inventory_annual": ["country_name", "land_use_category", "unit", "year"],
+    "climate_energy_demand.silver.land_cover_annual": ["country_name", "land_cover_category", "element", "unit", "year"],
+    "climate_energy_demand.silver.temp_change_annual": ["country_name", "months", "element", "unit", "year"]
 }
 
 # Expected minimum row counts (adjust based on your data)
@@ -55,7 +59,9 @@ MIN_ROW_COUNTS = {
     "climate_energy_demand.silver.dim_stations": 10,
     "climate_energy_demand.silver.dim_date": 365,
     "climate_energy_demand.silver.dim_locations": 10,
-    "climate_energy_demand.silver.forest_inventory_annual": 10
+    "climate_energy_demand.silver.forest_inventory_annual": 10,
+    "climate_energy_demand.silver.land_cover_annual": 100,
+    "climate_energy_demand.silver.temp_change_annual": 100
 }
 
 # =============================================================================

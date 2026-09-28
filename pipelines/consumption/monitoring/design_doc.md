@@ -327,7 +327,7 @@ ORDER BY days_since_last_run DESC;
 
 **Dashboard Name**: Climate Analysis Dashboard
 
-**Dashboard File**: `dashboard/Climate Analysis Dashboard.lvdash.json` (in the DABs bundle root)
+**Dashboard File**: `dashboard/Climate Analysis Dashboard.lvdash.json` (in the Declarative Automation Bundle root)
 
 **Status**: ✅ Implemented and rendering — single page ("1. Monitoring") with 5 datasets, 17 widgets
 

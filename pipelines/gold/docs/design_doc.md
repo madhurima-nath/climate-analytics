@@ -80,14 +80,24 @@ Validate the reliability of "Virtual" weather data (Open-Meteo Reanalysis) again
 ## 4. Observability & Data Governance
 
 ### 1. Audit Table Schema (`climate_energy_demand.gold.ingestion_audit`)
+
+Created by `pipelines/gold/setup_gold.sql`:
+
+```sql
+CREATE TABLE IF NOT EXISTS climate_energy_demand.gold.ingestion_audit (
+    table_name STRING,
+    last_watermark TIMESTAMP,
+    rows_processed INT,
+    processed_at TIMESTAMP
+)
+```
+
 | Column | Description |
 | :--- | :--- |
-| `run_id` | Unique UUID for the execution batch. |
-| `target_table` | Name of the Gold table being updated. |
-| `source_row_count` | Number of rows read from the Silver layer. |
-| `target_row_count` | Number of rows written to the Gold layer. |
-| `execution_status` | SUCCESS / FAILED. |
-| `latency_seconds` | Time taken for the Python transformation function to complete. |
+| `table_name` | Name of the Gold table being tracked. |
+| `last_watermark` | Timestamp of the most recent processing cycle for this table. |
+| `rows_processed` | Number of rows written in the latest run. |
+| `processed_at` | When the audit record was written. |
 
 ### 2. Semantic Mapping
 The Gold orchestrator is responsible for deploying the **STTM (Source-to-Target Mapping)** logic. All resulting tables are enforced with `ISO-3166` (Country), `Metric` (Units), and `UTF-8` (Encoding) standards.

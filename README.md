@@ -3,6 +3,43 @@
 ## Overview
 This repository contains a modular, end-to-end climate data pipeline built on Databricks. It ingests multi-source raw climate, energy, and environmental data and transforms it into high-fidelity, queryable assets for AI/BI Dashboards and Genie natural language inquiry.
 
+## Why These Datasets?
+
+The pipeline draws on four public data sources, each chosen to cover a distinct facet of physical climate risk:
+
+| Source | What it provides | Why it's here |
+| --- | --- | --- |
+| **Open-Meteo** (Historical + Incremental) | Hourly weather observations (temperature, precipitation, wind, humidity) for any lat/lon | Foundation for current-condition analysis and the join key for energy demand modelling |
+| **NOAA GSOD** | Daily weather station observations with multi-decade history | Provides station-level ground-truth weather with long temporal coverage for trend analysis |
+| **OWID Energy** | Country-level energy consumption, production, and emissions metrics | Links climate variables to human energy demand and decarbonisation tracking |
+| **FAOSTAT** | Land cover, forest inventory, and temperature change indicators by country | Connects climate trends to land-use and ecological resilience outcomes |
+| **Open-Meteo CMIP6** | Climate model projections under SSP scenarios | Enables forward-looking risk analysis beyond historical observations |
+
+Together these sources span weather observations, climate projections, energy demand, and land/forest indicators — the four pillars needed for a Physical Climate Risk (PCR) analytics layer on Databricks Free Edition.
+
+## Why These Gold Tables?
+
+The Gold layer distills the standardised Silver data into analysis-ready fact and dimension tables:
+
+| Gold table | Purpose |
+| --- | --- |
+| `fct_energy_demand` | Joins energy consumption with weather observations to expose the relationship between climate and energy use |
+| `fct_temp_change_annual` | Annual temperature-change indicators by country, ready for trend visualisation |
+| `fct_land_cover_annual` | Year-over-year land cover transitions to detect deforestation and degradation patterns |
+| `fct_forest_resilience` | Combines forest inventory with temperature signals to score forest ecosystem resilience |
+| `fct_ground_truth_audit` | Audit fact table for data-quality monitoring and pipeline health dashboards |
+| `dim_stations`, `dim_locations`, `dim_date`, `dim_koppen_zones` | Shared dimensions enabling cross-fact-table drill-downs by station, geography, time, and climate zone |
+
+## Design Decisions for Free Edition
+
+This project is built for **Databricks Free Edition**, which constrains several architectural choices:
+
+* **Full-reload Gold pipeline**: Free Edition does not support Delta Live Tables or incremental MERGE pipelines. Gold tables are dropped and recreated on each run via the orchestrator. This keeps the pipeline simple and idempotent at the cost of reprocessing the full Silver dataset each cycle.
+* **YAML-driven transforms**: Each Silver and Gold table is declared in a YAML config that specifies schema, source query, column comments, and transformation function. The orchestrators read these configs at runtime, keeping the pipeline declarative and avoiding hard-coded SQL.
+* **Notebook-based orchestration**: Each layer has a single orchestrator notebook (`silver_orchestrator`, `gold_orchestrator`) that iterates over its YAML configs and calls Python transform functions from `src/transforms/`. This replaces DLT-style declarative pipelines that aren't available on Free Edition.
+* **Serverless compute**: Jobs auto-attach serverless compute — no cluster configuration is needed, but wall-clock time and concurrency limits apply.
+* **No streaming**: All ingestion is batch. Open-Meteo incremental notebooks fetch the latest available window on each run rather than maintaining a continuous stream.
+
 ## Data Lifecycle: Medallion Architecture
 The data flows through three distinct layers, ensuring data integrity from ingestion to insight:
 1. **Bronze (Ingestion)**: Raw data ingestion from multiple climate sources (Open-Meteo, OWID, NOAA GSOD, FAOSTAT) via source-specific notebooks.
@@ -85,9 +122,10 @@ climate-analytics
 └── README.md
 ```
 
+- `setup/`: Two SQL scripts — `project_infrastructure.sql` creates the `climate_energy_demand` catalog, all schemas (bronze, silver, gold, monitoring), and monitoring tables; `verify_bootstrap.sql` validates that the infrastructure exists before pipeline jobs are run.
 - `pipelines/`: Core transformation logic separated by Medallion tier, plus the consumption/monitoring layer.
-- `src/transforms/`: Python modules implementing the transformation logic for each domain (energy, weather, climate, nature, quality).
-- `src/common/`: Shared utilities including audit watermarking and common transformation logic.
-- `src/tests/`: Automated pytest suites validating infrastructure, bronze, silver, and gold layers.
+- `src/transforms/`: Six Python modules implementing domain-specific transformation logic — `energy.py` (energy demand transforms), `weather.py` (weather observation/projection transforms), `climate.py` (temperature change transforms), `nature.py` (land cover and forest resilience transforms), `quality.py` (data quality checks), and `common.py` (shared transform helpers).
+- `src/common/`: Shared utilities — `audit_utils.py` (watermark tracking and audit-table writes) and `shared_logic.py` (common transformation helpers reused across domains).
+- `src/tests/`: Automated pytest suites — `test_infrastructure.py` (bootstrap verification), `test_bronze_tables.py`, `test_silver_tables.py`, `test_gold_tables.py`, `test_shared_logic.py`, and `test_audit_utils.py`. A `run_all_tests_notebook` notebook is provided for Databricks-native test execution.
 - `dashboard/`: Version-controlled AI/BI Dashboard definition deployed as a bundle resource.
 - `requirements.txt`: Python libraries required for the project.

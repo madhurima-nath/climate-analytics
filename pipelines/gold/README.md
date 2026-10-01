@@ -25,7 +25,7 @@ gold/
 │   └── gold_source_to_target_mappings.md  # See index for full list
 │
 ├── setup_gold.sql                   # Creates gold.ingestion_audit table
-├── gold_orchestrator.py             # Config-driven transformation runner (notebook)
+├── gold_orchestrator             # Config-driven transformation runner (notebook)
 └── README.md                        # This file
 ```
 

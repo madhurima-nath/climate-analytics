@@ -32,7 +32,7 @@ To mitigate the 10-minute execution timeout enforced by the Databricks Free Edit
 | **02_ingest_owid_energy** | Energy Consumption | Our World in Data (OWID) | Annual (Global) | Volume-to-Delta Overwrite |
 | **03_ingest_noaa_gsod** | Ground-Truth Observations | NOAA GSOD | Daily (Station-level) | Haversine Spatial Discovery |
 | **04_ingest_openmeteo_cmip6_projections** | Climate Projections | Open-Meteo CMIP6 | Daily (Sampled) | Multi-model Ensemble (7 Models) |
-| **05_ingest_fao_data** | Forestry, Land Cover, Carbon Flux | FAOSTAT (UN) + Global Forest Watch | Annual, spatial per file | Bulk Volume Ingestion | 
+| **05_ingest_fao_data** | Forestry, Land Cover, Temperature Change | FAOSTAT (UN) | Annual, per file | Bulk Volume Ingestion |
 
 
 ## 4. Engineering Decisions & Resilience
@@ -58,10 +58,10 @@ Notebook **NOAA** implements the **Haversine Formula** to find the nearest physi
 Notebook **CMIP6** supports the ingestion of all 7 available HighResMIP ensemble models (e.g., EC-Earth3P-HR, MRI-AGCM3-2-S). To optimise performance, the pipeline uses Strategic Temporal Sampling, ingesting complete years in 5-year intervals, instead of a continuous pull. This provides the necessary longitudinal resolution for Heating/Cooling Degree Day (HDD/CDD) calculations while reducing API overhead.
 
 ### E. Character Encoding & Schema Sanitisation
-Notebook **FAO GFW** handles diverse international datasets from the UN (FAOSTAT) and Global Forest Watch (GFW).
+Notebook **FAO** handles diverse international datasets from FAOSTAT (UN), covering Land Use, Land Cover, and Temperature Change domains.
 * Encoding Resilience: Uses ISO-8859-1 encoding to preserve special characters in international area names.
 * Automated Sanitisation: Implements a Regex-based sanitisation function to ensure all raw CSV headers are converted into Delta-compatible, lowercase, and snake-case column names.
-* Dynamic Table Routing: Uses a pattern-matching engine to automatically route diverse CSV files (Land Cover, Peatlands, Carbon Flux) to their respective target tables based on filename metadata.
+* Dynamic Table Routing: Uses a pattern-matching engine to automatically route diverse CSV files (Land Cover, Land Use, Temperature Change) to their respective target tables based on filename metadata.
 
 
 ## 5. Maintenance & Refresh

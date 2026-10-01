@@ -155,7 +155,6 @@ Full Pipeline (chains all layers for CI/CD):
        │  Transform & Standardise
        │  • Unit conversion
        │  • Thermal stress calc
-       │  • H3 indexing
        │  • Wide-to-long pivot
        ▼
 ┌─────────────┐
@@ -184,9 +183,9 @@ To model the energy demand required for climate control, we implement a "Neutral
 
 **Reasoning:** 15°C is the standard residential heating activation threshold in the EU. 25°C represents the point where mechanical cooling (AC) demand begins to scale, specifically in temperate and tropical urban environments like Singapore.
 
-> **Note:** These hardcoded bases (15°C/25°C) are being replaced with dynamic climate-zone-specific thresholds in the Gold layer (see Gold design doc). The Köppen-Geiger classification drives per-zone base temperatures.
+> **Note:** These hardcoded bases (15°C/25°C) have been replaced with dynamic climate-zone-specific thresholds in the Gold layer (see Gold design doc). The Köppen-Geiger classification drives per-zone base temperatures.
 
-## 3. Data Quality: NOAA GSOD Precipitation Sentinel
+## 2. Data Quality: NOAA GSOD Precipitation Sentinel
 
 **Issue:** NOAA GSOD uses `99.99` inches as the missing-data indicator for precipitation. The silver transform (`weather.py: process_weather_observations`) was not filtering this, converting it to `2539.75mm` — a physically impossible value stored as real precipitation.
 
@@ -198,28 +197,6 @@ To model the energy demand required for climate control, we implement a "Neutral
 - **Rationale for NULL over 0:** 0 means "no rain measured." NULL means "no measurement taken." Downstream aggregations (`SUM`/`AVG`) skip NULLs naturally.
 
 **Downstream impact:** Gold layer Köppen-Geiger classification (`src/transforms/climate.py`) uses monthly precipitation totals. Stations with insufficient non-NULL precipitation coverage are skipped to avoid misclassification.
-
-## 2. Geospatial Indexing (H3)
-*   **Resolution:** Uber H3 Resolution 6 (~737 km² per cell).
-*   **Logic:** Convert all coordinate-based weather data and polygon-based land use maps into a common hexagonal grid.
-*   **Impact:** This enables $O(1)$ join complexity. It allows the platform to join forestry carbon flux data with historical temperature drivers without expensive "Point-in-Polygon" spatial operations.
-
-### 2.1 Global Forest Watch Tile_ID System
-Global Forest Watch (GFW) organises their global raster datasets using a **tile-based coordinate encoding**:
-
-*   **Format:** `{LAT}N/S_{LON}E/W` (e.g., `00N_000E`, `10N_050W`, `45S_120E`)
-*   **Tile Coverage:** Each tile represents a **10° × 10°** geographic area (~1,100 km × 1,100 km at the equator)
-*   **Purpose:** Efficiently manages massive global raster datasets by dividing Earth into manageable chunks
-
-**Parsing Logic:**
-```python
-# Extract coordinates from tile_id
-parts = tile_id.split("_")
-lat = float(parts[0][:-1]) * (1 if parts[0][-1] == "N" else -1)
-lon = float(parts[1][:-1]) * (1 if parts[1][-1] == "E" else -1)
-```
-
-**Implementation:** Since GFW metadata tables (peatlands, carbon flux) lack explicit latitude/longitude columns, we parse the tile_id to extract centre coordinates for spatial binning and aggregation. This allows us to create spatial dimensions (`dim_h3_grid`) and perform geographic joins with weather data.
 
 ## 3. Data Persistence (Forward Fill)
 *   **Logic:** Missing temperature observations are forward-filled for a maximum of 3 consecutive days.

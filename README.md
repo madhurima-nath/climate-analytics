@@ -5,7 +5,7 @@ This repository contains a modular, end-to-end climate data pipeline built on Da
 
 ## Data Lifecycle: Medallion Architecture
 The data flows through three distinct layers, ensuring data integrity from ingestion to insight:
-1. **Bronze (Ingestion)**: Raw data ingestion from multiple climate sources (Open-Meteo, OWID, NOAA GSOD, FAOSTAT, Global Forest Watch) via source-specific notebooks.
+1. **Bronze (Ingestion)**: Raw data ingestion from multiple climate sources (Open-Meteo, OWID, NOAA GSOD, FAOSTAT) via source-specific notebooks.
 2. **Silver (Standardisation)**: Unit normalisation, temporal alignment, cross-source cleaning, and dimensional harmonisation driven by YAML configs and Python transform modules.
 3. **Gold (Analytics)**: Denormalised, analysis-ready fact tables optimised for Physical Climate Risk (PCR) analysis, AI/BI Dashboards, and Genie natural language queries.
 
@@ -52,7 +52,7 @@ All job runs are tracked in `climate_energy_demand.monitoring` tables: `pipeline
 The final delivery layer leverages Databricks AI/BI Dashboards and the Genie semantic agent.
 - **Semantic Context**: Every Gold and Silver table includes column-level comments auto-registered in Unity Catalog, enabling stakeholders to perform natural language inquiries (e.g. "Identify the five-year warming trend for coastal regions").
 - **Asset Management**: The AI/BI Dashboard definition is version-controlled as a `.lvdash.json` file in the `dashboard/` directory and deployed as a bundle resource.
-- **Genie Instructions**: Domain-specific Genie instructions are maintained in `pipelines/consumption/analytics/`.
+- **Genie Enablement**: Genie semantic understanding is driven by column-level `COMMENT` properties in the YAML configs, which are auto-registered to Unity Catalog by the orchestrators. No separate Genie instruction files are required.
 
 
 ## Repository Structure
@@ -66,17 +66,16 @@ climate-analytics
 │   ├── silver/                  # Standardisation & cleaning
 │   │   ├── configs/              # YAML declarative table definitions
 │   │   ├── docs/                 # Design, architectural decisions, roadmap
-│   │   ├── silver_orchestrator.py
+│   │   ├── silver_orchestrator   # Centralised execution engine (notebook)
 │   │   └── setup_silver.sql
 │   ├── gold/                    # Aggregated analytics fact tables
 │   │   ├── configs/              # YAML table definitions (facts + dimensions)
 │   │   ├── docs/                 # Design doc and architecture logic
 │   │   ├── source_to_target_mappings/  # Lineage CSVs (Silver → Gold)
-│   │   ├── gold_orchestrator.py
+│   │   ├── gold_orchestrator     # Config-driven transformation runner (notebook)
 │   │   └── setup_gold.sql
 │   └── consumption/
-│       ├── monitoring/          # Monitoring table setup + dashboard design doc
-│       └── analytics/            # Genie semantic instructions
+│       └── monitoring/          # Monitoring table setup + dashboard design doc
 ├── src/
 │   ├── transforms/              # Domain-specific transformation modules
 │   ├── common/                   # Shared utilities (audit, shared logic)

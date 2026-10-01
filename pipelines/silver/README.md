@@ -35,11 +35,10 @@ graph TD
 │   │   │   ├── dim_date.yml
 │   │   │   └── dim_locations.yml
 │   │   ├── docs/                    # documentation for design, architectural decisions and roadmap
-│   │   ├── silver_orchestrator.py  # centralised execution engine (notebook)
+│   │   ├── silver_orchestrator   # centralised execution engine (notebook)
 │   │   └── setup_silver.sql        # audit schema initialisation
 │   └── consumption/
-│       ├── monitoring/             # Monitoring tables & dashboard design doc
-│       └── analytics/              # Genie semantic instructions
+│       └── monitoring/             # Monitoring tables & dashboard design doc
 ├── src/
 │   ├── common/                    # shared utilities and audit logic
 │   ├── transforms/                # domain-specific transformation logic

@@ -156,9 +156,9 @@ Subsequent Run (Incremental):
 │  ├── nature.py                                                  │
 │  │   └── process_forest_inventory()                             │
 │  └── common.py                                                  │
-│      ├── calculate_thermal_stress()                             │
-│      ├── geospatial_indexing()                                  │
-│      └── relational_normalisation()                             │
+│      ├── create_dim_locations()                             │
+│      ├── create_dim_date()                                  │
+                             │
 └─────────────────────────────────────────────────────────────────┘
 
   Adding a New Table = Creating One YAML File
@@ -199,7 +199,7 @@ Terminology Alignment:
 used country_name in the merge_keys to match the output of your process_forest_inventory Python function. Consistency between the YAML and the Python code is vital for a "Cold Reader" to follow the data lineage.
 
 Unit Standardisation Placeholder:
-added unit_standard: "ha" to the parameters. This acts as a clear signal that the Silver layer is responsible for ensuring all nature data is in Hectares, making it instantly joinable with the Carbon Flux data later.
+added unit_standard: "ha" to the parameters. This acts as a clear signal that the Silver layer is responsible for ensuring all nature data is in Hectares, making it instantly joinable with other nature datasets in the Gold layer.
 
 
 
@@ -231,20 +231,7 @@ Genie Hooks: The description field is phrased as a full sentence. This is best p
 
 
 
-Global Forest Watch (GFW) data. It is the most technically distinct of your nature datasets because it moves from raw geographical points (Latitude/Longitude) to a structured Geospatial Index (H3).
-`pipelines/silver/configs/carbon_flux_spatial.yml`
-Key Engineering Decisions in this file:
-Spatial-Temporal Merge Keys:
-By using h3_cell and year as the primary keys, we ensure that each 30km hexagon on Earth has exactly one "Carbon Profile" per year. This prevents the Silver layer from becoming cluttered with overlapping or duplicate spatial tiles.
 
-H3 Resolution Standardisation:
-We have explicitly set h3_resolution: 6. This ensures that the carbon data is "binned" at the exact same spatial grain as your weather data, making the Gold-layer join a simple ID-to-ID match.
-
-Genie-Optimised Description:
-The description specifically mentions "Sink vs Source." This tells the AI that this table is the "Source of Truth" for determining if a forest is capturing carbon or losing it to the atmosphere.
-
-Decoupling Logic from Space:
-in the future if Resolution 6 is too coarse, only change this single number in the YAML. The Python logic will automatically recalculate the entire grid at the new resolution during the next run.
 
 
 
@@ -277,30 +264,17 @@ Seasonality Logic: By including "EU Seasonality" in the description, you tell th
 Extended Range: By extending the calendar to 2040, you ensure the Gold layer can handle the Climate Projections data without the joins failing for future dates.
 
 
-`pipelines/silver/configs/dim_h3_grid.yml` configuration creates the Master Spatial Dimension. It is a critical "bridge" table that classifies every 30km hexagon (H3 Resolution 6) by its land type. This allow the AI to answer questions like: "What was the temperature stress in Peatland regions compared to Urban areas?"
-
-Key Engineering Decisions in this file:
-Spatial Classification (The "Why"):
-Standard Latitude/Longitude points are useless for the AI/BI Genie because it cannot "reason" about coordinates. By classifying hexagons as "Peatland" or "Urban," we give the AI the vocabulary it needs to perform geographical comparisons.
-
-H3 Resolution Parity:
-By forcing h3_resolution: 6 here, we guarantee that this dimension table will "snap" perfectly to your weather and carbon flux tables. This avoids the "spatial mismatch" problem common in many climate projects.
-
-Composite Primary Key:
-The merge_keys include land_type. This is a professional safeguard. If a single H3 hexagon contains both "Peatland" and "Forest," this structure allows us to capture both attributes rather than overwriting one with the other.
-
-Decoupling Logic:
-The transformation logic (the geospatial module) handles the heavy geometry math, while the YAML simply defines the input and the grain. This makes the pipeline very easy to maintain if you acquire better land-type data (e.g., Urban heat-island maps) in the future.
 
 
-`pipelines/silver/configs/dim_stations.yml` configuration extracts and standardises the metadata for the NOAA weather stations. It is a critical "bridge" table that ensures every weather station is correctly mapped to a specific Country and H3 Hexagon, allowing for seamless joining between station-level ground truths and national-level energy data.
+
+`pipelines/silver/configs/dim_stations.yml` configuration extracts and standardises the metadata for the NOAA weather stations. It is a critical "bridge" table that ensures every weather station is correctly mapped to a specific Country, allowing for seamless joining between station-level ground truths and national-level energy data.
 
 Key Engineering Decisions in this file:
 Deduplication at the Source:
 In the Bronze layer, station metadata is often repeated across millions of rows of daily observations. This YAML triggers a "Distinct" extraction, creating a lean, high-performance lookup table that reduces data redundancy in the Silver layer.
 
 Spatial Anchoring:
-By including h3_resolution: 6 in the parameters, the logic will assign each station to an H3 cell. This allows you to say: "Station X is the primary ground-truth for Hexagon Y," which is essential for validating your climate models later.
+The station dimension is deduplicated from raw NOAA observations, creating a lean lookup table. Each station is mapped to its country for join compatibility with weather and energy data.
 
 Data Integrity:
 The merge_keys is set strictly to station_id. This prevents the dimension table from growing indefinitely if station coordinates are updated; instead, the existing record is updated with the most recent, accurate location.
@@ -342,50 +316,16 @@ Genie Integration:
 The orchestrator automatically applies the description from the YAML as a COMMENT ON TABLE. This ensures that your AI/BI Genie always has the metadata it needs to answer user questions.
 
 Summary of what we have achieved:
-Decoupled Logic: The "Engine" is separate from the "Maths."
-
-Metadata-Driven: You control everything via 10 simple YAML files.
-
-Incremental: You only process new data, respecting the Free Edition's limits.
-
-
-`databricks.yml` is the final "Infrastructure as Code" (IaC) component. The databricks.yml file acts as the blueprint for your entire project, telling the Databricks platform how to deploy and run your modular library on the Free Edition.
-Idempotent Orchestration:
-By putting the setup_silver.sql and silver_orchestrator.py in the same Job, you ensure that every time the pipeline runs, it first verifies that the tables exist. This makes the system "self-healing."
-
-Single-Node Optimisation:
-The configuration num_workers: 0 is the specific "Free Edition" flag. It ensures you don't try to spin up a multi-node cluster that the Free Edition would reject.
-
-Path Resolution:
-In the September 2026 environment, Databricks Asset Bundles automatically manage the "Workspace Files" for you. When you deploy this bundle, the Python script will be able to find the configs/ folder and the src/ library using the relative paths we built into the orchestrator.
-
-Scaling to Paid Tier:
-If you move to a Paid Tier later, you only change one line in this file (num_workers: 8) and the entire project scales to a massive cluster without touching any Python code.
+* Decoupled Logic: The "Engine" is separate from the "Maths."
+* Metadata-Driven: You control everything via 10 simple YAML files.
+* Incremental: You only process new data, respecting the Free Edition's limits.
 
 
 
-We have now designed the following:
 
-Repository Structure: Modular, professional, and jargon-free.
 
-Infrastructure: SQL-based Catalog, Schemas, and Audit Table.
 
-Metadata: 10 YAML files defining the "Contract" for each table.
 
-Logic: 5 Python modules in src/transforms/ handling the math.
-
-The Engine: A Python Orchestrator that automates everything.
-
-IaC: A databricks.yml to deploy and schedule the work.
-
-How to start the project:
-Deploy: Run databricks bundle deploy from your terminal.
-
-Initialise: Run the setup/project_infrastructure.sql once manually in the SQL Editor to create the Catalog.
-
-Execute: Start the "Silver Layer: Master Orchestrator" job in the Databricks UI.
-
-This concludes the Silver Layer Design & Engineering Phase.
 
 ## 8: Modelled vs Observed Grain Mismatch (Known Limitation)
 *   **Context:** `fct_ground_truth_verification_daily` compares NOAA GSOD station observations (station grain) against Open-Meteo modelled data (country grain). The modelled data is fetched at a single reference coordinate per country, while the NOAA station is the closest station to that coordinate.

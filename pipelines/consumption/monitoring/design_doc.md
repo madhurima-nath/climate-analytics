@@ -85,7 +85,7 @@ CREATE TABLE IF NOT EXISTS climate_energy_demand.monitoring.pipeline_runs (
 
 **Key Features**:
 - ✅ **Unified table** - Both orchestration and validation runs in one place
-- ✅ **Per-table detail in error_message** - "Completed: energy_metrics (1,234 rows) | Skipped: weather (no new data) | Failed: carbon_flux (NameError)"
+- ✅ **Per-table detail in error_message** - "Completed: energy_metrics (1,234 rows) | Skipped: weather (no new data) | Failed: forest_inventory (NameError)"
 - ✅ **Orchestrator summary counts** - total_configs, configs_completed, configs_skipped, configs_failed
 - ✅ **Links to test_results** - test_execution_id joins to test_results.execution_id for drill-down
 
@@ -240,7 +240,7 @@ LIMIT 50;
 
 **Key**: `error_message` contains per-table detail like:
 ```
-Completed: energy_metrics (1,234 rows) | Skipped: weather_historical (no new data) | Failed: carbon_flux (NameError)
+Completed: energy_metrics (1,234 rows) | Skipped: weather_historical (no new data) | Failed: forest_inventory (NameError)
 ```
 
 ---
@@ -610,74 +610,7 @@ Git tracking alone version-controls the file, but registering it as a bundle res
 
 **Impact on existing resources**: Adding a `dashboards:` block is independent of the `jobs:` block. `bundle deploy` re-deploys jobs only if their definitions changed; since no job entries were modified, existing pipelines remain untouched. `bundle run` is resource-specific, deploying a dashboard does not trigger any job to run.
 
-#### Streamlit Note
-
-The entire Lakeview dashboard design, including all datasets (`ds_latest_pipeline_run`, `bronze_details`, `ds_latest_test_results`, `ds_per_table_details`, `ds_table_kpis`), the 3-column layout, KPI counters, run info tables, per-table details (Bronze: static 21-table inventory; Silver/Gold: dynamic orchestration breakdown), validation tables with human-readable test names and summarised error details, and all SQL queries, must be replicated in the Streamlit app. See the Streamlit section below for replication requirements.
-
----
-
-## Streamlit Dashboard: External Access
-
-### Purpose
-
-Provide external stakeholders (non-Databricks users) with read-only access to pipeline monitoring.
-
-> **⚠️ Replication Requirement**: The entire Lakeview dashboard design, including all datasets (`ds_latest_pipeline_run`, `bronze_details`, `ds_latest_test_results`, `ds_per_table_details`, `ds_table_kpis`), the single-page 3-column layout, KPI counters (table counts + refresh dates), run info tables, per-table details (Bronze: static 21-table inventory with full source paths; Silver/Gold: dynamic orchestration breakdown), validation tables with human-readable test names and summarised error details, and all SQL queries, must be replicated in this Streamlit app. External stakeholders should see the same information and layout as the Lakeview dashboard.
-
-### Architecture
-
-```
-Streamlit App → Databricks SQL Warehouse → Monitoring Tables
-```
-
-### Connection Pattern
-
-```python
-from databricks import sql
-import os
-
-connection = sql.connect(
-    server_hostname=os.environ["DATABRICKS_SERVER_HOSTNAME"],
-    http_path=os.environ["DATABRICKS_HTTP_PATH"],
-    access_token=os.environ["DATABRICKS_TOKEN"]
-)
-```
-
-### Key Components
-
-```python
-import streamlit as st
-import pandas as pd
-
-# KPI Cards
-col1, col2, col3, col4 = st.columns(4)
-with col1:
-    st.metric("Total Runs", total_runs)
-with col2:
-    st.metric("Success Rate", f"{success_rate}%")
-
-# Recent Runs Table
-st.dataframe(runs_df)
-
-# Test Results
-st.dataframe(tests_df)
-```
-
-### Deployment Options
-
-1. **Streamlit Community Cloud** - Free hosting
-2. **Databricks Apps** - Native integration (recommended)
-3. **Container Hosting** - AWS/Azure/GCP
-
-### Security
-
-- Create service principal for app access
-- Grant SELECT only on monitoring tables
-- Use OAuth token stored in secrets manager
-
----
-
-## Gold Layer Monitoring (Future)
+## Gold Layer Monitoring
 
 ### Overview
 
@@ -727,12 +660,13 @@ spark.sql(f"""
 
 ### Gold Validation Tests
 
-Create `/src/tests/test_gold_tables.py` with:
+The gold validation test suite (`src/tests/test_gold_tables.py`) is implemented and covers:
 
-1. **Table existence** - Verify all gold tables exist
-2. **Data quality** - No orphan facts, referential integrity
-3. **Business logic** - Aggregates match silver detail
-4. **Dimension validity** - All dimension keys valid
+1. **Table existence** - Verify all gold fact and dimension tables exist
+2. **Business logic validation** - DSI ≥ 0, carbon density correctness, warming flags
+3. **Primary key uniqueness** - No duplicate keys in any gold table
+4. **Referential integrity** - Gold tables join back to Silver sources
+5. **Model accuracy sanity** - Ground truth verification per country (documents Greece as a known limitation)
 
 ### Dashboard Integration
 
@@ -746,12 +680,12 @@ WHERE layer = 'gold'  -- Just add this filter
 
 ### Implementation Checklist
 
-- [ ] Add orchestration logging to gold orchestrator
-- [ ] Create test_gold_tables.py with ~15-20 tests
-- [ ] Add gold_data_validation job to bundle
-- [x] Update dashboard filters to include gold (already implemented in single-page dashboard)
-- [ ] Create gold.ingestion_audit table
-- [x] Add gold watermark widget to dashboard (covered by ds_table_kpis gold refresh date counter)
+- [x] Gold orchestrator logging to pipeline_runs (gold_orchestrator.py logs runs)
+- [x] test_gold_tables.py created and running (business logic, PK uniqueness, referential integrity)
+- [x] gold_validation job in databricks.yml
+- [x] Dashboard filters include gold (single-page dashboard, layer='gold' filter)
+- [x] gold.ingestion_audit table created (setup_gold.sql)
+- [x] Gold watermark widget in dashboard (ds_table_kpis gold refresh date counter)
 
 ---
 
@@ -777,8 +711,7 @@ WHERE layer = 'gold'  -- Just add this filter
 
 ### Ready to Build 🔲
 
-- Streamlit App (external access)
-- Genie space (natural language Q&A)
+- Genie space (natural language Q&A over gold tables)
 
 ### Design Principles ✅
 

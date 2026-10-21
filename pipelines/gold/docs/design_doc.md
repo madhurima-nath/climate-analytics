@@ -1,7 +1,7 @@
 # Design Document: Gold Layer Intelligence Platform
 
 ## 1. Global Engineering Standards
-To ensure a senior-level, production-grade platform, all Gold-layer tables adhere to these architectural standards:
+All Gold-layer tables adhere to these standards:
 
 > **Data Quality Dependency:** Gold layer Köppen-Geiger climate classification depends on clean silver precipitation data. NOAA GSOD sentinel value (`prcp = 99.99` → `2539.75mm`) was fixed in silver `weather.py` (replaced with NULL) and existing data cleaned with a one-time UPDATE. See silver design doc §3 for details.
 
@@ -28,7 +28,7 @@ Quantify the relationship between daily climatic stress and national energy cons
 2.  **Demand Sensitivity Index (DSI):** A calculated intensity metric:
     `DSI = (hdd + cdd) / (annual_electricity_consumption / 365)`
     *Logic: Normalises thermal demand (Heating/Cooling Degree Days) against the average daily baseline of the national grid.*
-3. **Climatological Normalisation:** To account for geographic diversity, "Extreme Heat" is defined relatively. We calculate the temp_anomaly by comparing the daily mean against a 10-year monthly baseline for each iso_code. This ensures that energy demand spikes are analyzed in the context of local adaptation (e.g., a 25°C day in a typically 15°C region is flagged as a high-stress event). Heat stress is calculated using local monthly baselines to account for geographic adaptation, following EU/WMO standards for relative anomalies.
+3. **Climatological Normalisation:** To account for geographic diversity, "Extreme Heat" is defined relatively. We calculate the temp_anomaly by comparing the daily mean against a 10-year monthly baseline for each iso_code. This ensures that energy demand spikes are analysed in the context of local adaptation: a 25°C day in a typically 15°C region is flagged as a high-stress event. This follows EU/WMO standards for relative anomalies.
 
 ### 4. Key Business Metrics
 *   **Grid Volatility:** Variance of the DSI identifying countries with unhedged climate risk.
@@ -51,7 +51,7 @@ Quantify the impact of physical climate stress on forest carbon health using FAO
 4.  **Carbon Density:** Calculated as `forest_carbon_mt / forest_area_ha`.
 
 ### 4. Key Business Metrics
-*   **Carbon Density:** Carbon stock per hectare — higher values indicate denser, more carbon-rich forest.
+*   **Carbon Density:** Carbon stock per hectare; higher values indicate denser, more carbon-rich forest.
 *   **Heat Stress Exposure:** Countries with high `extreme_heat_days_count` and significant forest area are at elevated climate risk.
 
 ---

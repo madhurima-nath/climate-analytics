@@ -1,6 +1,6 @@
 # Gold Layer Architecture: Climate & Energy Intelligence
 
-The Gold layer is the final "Consumption Zone" of the platform. It denormalises Silver-layer data into high-value, semantic tables optimised for Physical Climate Risk (PCR) analysis, AI/BI Genie discovery, and executive dashboards.
+The Gold layer is the consumption zone of the platform. It denormalises Silver data into fact and dimension tables that answer specific analytical questions directly, without the reader having to join or aggregate anything. Each table targets one use case: Physical Climate Risk (PCR) analysis, AI/BI Genie discovery, or executive dashboards.
 
 ## 1. Project Structure
 
@@ -26,17 +26,26 @@ gold/
 │
 ├── setup_gold.sql                   # Creates gold.ingestion_audit table
 ├── gold_orchestrator             # Config-driven transformation runner (notebook)
+├── gold_sdp.py                   # SDP source file (declarative gold materialized views)
 └── README.md                        # This file
 ```
 
 **Key Design Principles:**
-* **Config-Driven**: All table schemas, joins, and metadata defined in YAML
-* **Modular**: Each fact table has its own config + transformation function
-* **Observable**: Every run logs to `gold.ingestion_audit` for lineage tracking
-* **AI-Ready**: Column comments auto-sync to Unity Catalog for Genie discovery
+* **Config-Driven**: All table schemas, joins, and metadata are defined in YAML, so adding a fact table means a new config, not new orchestration code.
+* **Modular**: Each fact table has its own config and transformation function, so a failure in one table does not block the others.
+* **Observable**: Every run logs to `gold.ingestion_audit` for lineage tracking.
+* **AI-Ready**: Column comments auto-sync to Unity Catalog for Genie discovery.
+
+## Pipeline Approaches
+
+The Gold layer supports two coexisting orchestration approaches, both available on Free Edition:
+* **Notebook Orchestration (existing):** The `gold_orchestrator` notebook processes all YAML configs, performing full-reload (overwrite) on each run. Gold tables are derived aggregates of Silver, so a full rebuild is simpler and safer than incremental upserts: there is no merge state to drift, and Silver remains the single source of truth. Monitoring writes to `climate_energy_demand.monitoring.pipeline_runs`.
+* **Declarative Pipelines (SDP):** Gold tables can be declared as `@dlt.materialized_view` in an SDP source file, with automatic dependency resolution on upstream Silver streaming tables. Monitoring uses the SDP event log.
+
+Both approaches share the same `src/transforms/*.py` modules. For a full comparison and the coexistence exit criteria, see [Pipeline Approaches](../../pipeline_approaches.md).
 
 ## 2. System Wiring (The Registry)
-The `gold_orchestrator.py` dynamically maps Gold tables to their specific transformation modules based on the YAML definitions.
+The `gold_orchestrator` maps each Gold table to its transformation module via the YAML definitions. The mapping is config-driven for the same reason as Silver (ADR #6): the orchestrator has no hard-coded table list, so adding a Gold table requires only a new YAML file and transform function.
 
 | Target Table | Configuration File | Python Module | Transformation Function |
 | :--- | :--- | :--- | :--- |

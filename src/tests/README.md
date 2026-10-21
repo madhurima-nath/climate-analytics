@@ -2,9 +2,9 @@
 
 Comprehensive test suite for validating the Climate Energy Demand pipeline across all layers, including infrastructure, bronze, silver, and gold.
 
-## 🚨 Data Quality Issues Caught During Testing
+## Data Quality Issues Caught During Testing
 
-**This demonstrates the value of automated testing!** The test suite revealed critical data quality issues that would have gone unnoticed without systematic validation.
+The test suite revealed critical data quality issues that a manual review would have missed: broken primary keys, impossible values, and duplicate rows, all while every job reported success.
 
 ### Issues Discovered (September 6, 2026)
 
@@ -34,7 +34,7 @@ Comprehensive test suite for validating the Climate Energy Demand pipeline acros
 
 ### Key Takeaway
 
-> **This is exactly why we write unit tests!** These issues were invisible during pipeline runs (all jobs showed "SUCCESS") but would have corrupted every downstream analysis. Automated testing caught them before they reached production.
+> These issues were invisible during pipeline runs: every job showed "SUCCESS" while the data underneath was wrong. Automated testing caught them before they reached any downstream analysis. This is the case for the test suite: it validates the data, not the job status.
 
 ### Test-Driven Development Benefits
 1. **Early Detection**: Issues caught in development, not production

@@ -47,10 +47,10 @@ CREATE TABLE IF NOT EXISTS climate_energy_demand.monitoring.test_results (
 ```
 
 **Key Features**:
-- ✅ **One row per test function** - Not aggregated, shows ALL tests (passed AND failed)
-- ✅ **execution_id groups tests** - All tests from one validation run share the same execution_id
-- ✅ **Clean error parsing** - ANSI codes stripped, error components extracted (type, message, file, line)
-- ✅ **Dashboard-ready** - No need to parse logs or stack traces to understand failures
+- **One row per test function**: Not aggregated, shows ALL tests (passed AND failed)
+- **execution_id groups tests**: All tests from one validation run share the same execution_id
+- **Clean error parsing**: ANSI codes stripped, error components extracted (type, message, file, line)
+- **Dashboard-ready**: No need to parse logs or stack traces to understand failures
 
 ---
 
@@ -84,10 +84,10 @@ CREATE TABLE IF NOT EXISTS climate_energy_demand.monitoring.pipeline_runs (
 ```
 
 **Key Features**:
-- ✅ **Unified table** - Both orchestration and validation runs in one place
-- ✅ **Per-table detail in error_message** - "Completed: energy_metrics (1,234 rows) | Skipped: weather (no new data) | Failed: forest_inventory (NameError)"
-- ✅ **Orchestrator summary counts** - total_configs, configs_completed, configs_skipped, configs_failed
-- ✅ **Links to test_results** - test_execution_id joins to test_results.execution_id for drill-down
+- **Unified table**: Both orchestration and validation runs in one place
+- **Per-table detail in error_message**: "Completed: energy_metrics (1,234 rows) | Skipped: weather (no new data) | Failed: forest_inventory (NameError)"
+- **Orchestrator summary counts**: total_configs, configs_completed, configs_skipped, configs_failed
+- **Links to test_results**: test_execution_id joins to test_results.execution_id for drill-down
 
 ---
 
@@ -98,36 +98,36 @@ CREATE TABLE IF NOT EXISTS climate_energy_demand.monitoring.pipeline_runs (
 **Decision**: Use two monitoring tables (test_results + pipeline_runs) instead of three separate tables.
 
 **Reasoning**:
-- ✅ Simpler schema - One table for all job execution tracking
-- ✅ Easier joins - test_execution_id directly in pipeline_runs
-- ✅ Dashboard queries simpler - Single table to query for job status
+- Simpler schema - One table for all job execution tracking
+- Easier joins - test_execution_id directly in pipeline_runs
+- Dashboard queries simpler - Single table to query for job status
 
 ### 2. Why execution_id?
 
 **Decision**: Generate a unique UUID per test suite run, separate from run_id.
 
 **Reasoning**:
-- ✅ **Groups tests** - All tests from one validation run share the same execution_id
-- ✅ **Tracks runs over time** - "Show me all tests from the 10:00 AM validation"
-- ✅ **Counts validation runs** - COUNT(DISTINCT execution_id) = number of validation runs
+- **Groups tests**: All tests from one validation run share the same execution_id
+- **Tracks runs over time**: "Show me all tests from the 10:00 AM validation"
+- **Counts validation runs**: COUNT(DISTINCT execution_id) = number of validation runs
 
 ### 3. Why Clean Error Parsing?
 
 **Decision**: Strip ANSI codes, extract error components (type, message, file, line) at write time.
 
 **Reasoning**:
-- ✅ **Dashboard-ready** - No need to parse raw pytest output in SQL
-- ✅ **Readable** - "NameError: name spark is not defined" instead of ANSI-coded output
-- ✅ **Filterable** - WHERE error_type = 'AssertionError'
+- **Dashboard-ready**: No need to parse raw pytest output in SQL
+- **Readable**: "NameError: name spark is not defined" instead of ANSI-coded output
+- **Filterable**: WHERE error_type = 'AssertionError'
 
 ### 4. Why Record ALL Tests?
 
 **Decision**: Write one row per test function, including passed tests.
 
 **Reasoning**:
-- ✅ **Dashboard shows complete picture** - "9 tests ran: 7 passed, 2 failed"
-- ✅ **Verify test coverage** - "Did test_bronze_data_freshness run?"
-- ✅ **Trend analysis** - "test_bronze_tables_exist has passed 100% over 30 days"
+- **Dashboard shows complete picture**: "9 tests ran: 7 passed, 2 failed"
+- **Verify test coverage**: "Did test_bronze_data_freshness run?"
+- **Trend analysis**: "test_bronze_tables_exist has passed 100% over 30 days"
 
 ---
 
@@ -662,11 +662,11 @@ spark.sql(f"""
 
 The gold validation test suite (`src/tests/test_gold_tables.py`) is implemented and covers:
 
-1. **Table existence** - Verify all gold fact and dimension tables exist
-2. **Business logic validation** - DSI ≥ 0, carbon density correctness, warming flags
-3. **Primary key uniqueness** - No duplicate keys in any gold table
-4. **Referential integrity** - Gold tables join back to Silver sources
-5. **Model accuracy sanity** - Ground truth verification per country (documents Greece as a known limitation)
+1. **Table existence**: Verify all gold fact and dimension tables exist
+2. **Business logic validation**: DSI ≥ 0, carbon density correctness, warming flags
+3. **Primary key uniqueness**: No duplicate keys in any gold table
+4. **Referential integrity**: Gold tables join back to Silver sources
+5. **Model accuracy sanity**: Ground truth verification per country (documents Greece as a known limitation)
 
 ### Dashboard Integration
 

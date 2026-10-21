@@ -6,6 +6,42 @@ This repository contains a modular climate data pipeline built on Databricks Fre
 
 The project targets **Physical Climate Risk (PCR)** analysis: combining weather observations, climate projections, energy demand, and land-use indicators into tables ready for AI/BI Dashboards and Genie natural language queries.
 
+New to the project? Start with [How the Pipeline Works](#how-the-pipeline-works), then use the [Documentation Map](#documentation-map) to go deeper.
+
+## How the Pipeline Works
+
+### The three layers
+
+Data moves through three layers in the `climate_energy_demand` catalog, each with one responsibility and its own validation job:
+
+1. **Bronze, raw mirror.** Every source lands in its own Delta table exactly as delivered. Nothing is cleaned or converted here, deliberately: Fahrenheit readings, non-standard headers, and source-specific missing-value flags are all preserved, and every row is tagged with `ingested_at` and `source_file`. Because the raw data is untouched, any later correction can be replayed from the originals. Open-Meteo data is pulled via API, driven by `reference_locations.csv` (250+ territories); OWID, NOAA, and FAOSTAT files are uploaded manually to the `raw_uploads` Unity Catalog Volume and then ingested into governed Delta tables, because Free Edition network restrictions prevent direct downloads. Source-by-source design: [Bronze README](pipelines/bronze/README.md).
+
+2. **Silver, the standardisation gate.** The `silver_orchestrator` notebook processes one YAML config per table (`pipelines/silver/configs/*.yml`). For each config it reads the last watermark from `silver.ingestion_audit`, extracts only new Bronze rows past that watermark, calls the table's transform function in `src/transforms/` (units to metric, wide FAO/OWID tables pivoted to one row per year per metric, shared dimensions built once for every pipeline), MERGEs the result into the target on the config's merge keys, and writes the new watermark back to the audit table. Each config runs inside its own error handling, so one failing table is logged and skipped while the rest complete. Adding a Silver table means adding a YAML file: the orchestrator discovers it automatically. Deep detail: [Silver README](pipelines/silver/README.md), [silver design doc](pipelines/silver/docs/design_doc.md), and the [architecture decision records](pipelines/silver/docs/architectural_decisions.md).
+
+3. **Gold, rebuilt analytics.** The `gold_orchestrator` reads `pipelines/gold/configs/*.yml` and rebuilds every fact and dimension table from Silver on each run. Rebuilding rather than upserting is deliberate: Gold tables are derived aggregates with no independent truth of their own, so Silver remains the single source of truth and Gold can never drift from it. Deep detail: [Gold README](pipelines/gold/README.md), [gold design doc](pipelines/gold/docs/design_doc.md), and [architecture logic](pipelines/gold/docs/architecture_logic.md).
+
+Why layers at all: each layer depends only on the one before it, any layer can be rerun independently, and validation jobs run between layers so problems surface where they were caused.
+
+### Two ways to run Silver and Gold
+
+Silver and Gold can be run through either of two orchestration approaches, deployed side by side and writing to separate schemas so they never conflict:
+
+* **Notebook orchestration** (the production baseline today): config-driven orchestrator jobs as described above, with manual watermarks in `ingestion_audit`, per-layer scheduling, failure isolation per table, and monitoring through the `pipeline_runs` table.
+* **Lakeflow Spark Declarative Pipelines (SDP)** (the strategic direction): the same tables declared as `@dlt.streaming_table` (Silver) and `@dlt.materialized_view` (Gold) in a single pipeline, `silver_gold_sdp`, writing to the `silver_sdp` and `gold_sdp` schemas. Automatic checkpointing replaces the manual watermarks, and the built-in SDP event log replaces the audit tables.
+
+Both approaches call the same `src/transforms/*.py` functions, so a bug fix in a transform benefits both at once. This is a staged migration with explicit exit criteria, not an open-ended choice: SDP is the intended end state for Silver and Gold, while Bronze stays notebook-based in both because its ingestion is REST-API driven. The full comparison, coexistence rules, exit criteria, and when to use which: [Pipeline Approaches](pipeline_approaches.md). The decision record: [ADR #7](pipelines/silver/docs/architectural_decisions.md#7-dual-pipeline-approaches-notebook-orchestration-and-sdp-coexistence).
+
+### How the jobs are wired
+
+Everything above is deployed from `databricks.yml`, the Declarative Automation Bundle manifest:
+
+* `project_bootstrap` runs once and creates the catalog, all schemas (including `silver_sdp` and `gold_sdp`), and the audit and monitoring tables. It is idempotent and verified by `setup/verify_bootstrap.sql`.
+* Each layer has independent load and validation jobs (`silver_data_load`, `silver_validation`, `gold_data_load`, `gold_validation`, `bronze_validation`) that can be triggered individually.
+* `climate_data_pipeline` chains the full sequence: bronze validate, silver load, silver validate, gold load, gold validate. Bronze validation uses `run_if: ALL_DONE`, so stale Bronze data is flagged without blocking the rest of the run.
+* The SDP pipeline `silver_gold_sdp` is created by the same deploy and started manually from the Pipelines page.
+
+The job table with when-to-use guidance is in [Getting Started](#getting-started).
+
 ## Data Sources
 
 The pipeline draws on four public data providers across five ingestion streams, each covering a distinct facet of physical climate risk:
@@ -20,59 +56,56 @@ The pipeline draws on four public data providers across five ingestion streams, 
 
 Together these sources span weather observations, climate projections, energy demand, and land/forest indicators: the four pillars of a Physical Climate Risk analytics layer.
 
-## Gold Layer and Analytical Use Cases
+## What the Gold Layer Answers
 
-The Gold layer distills standardised Silver data into analysis-ready fact and dimension tables. Each fact table is designed to drive a specific class of analytical question:
+The Gold layer distils standardised Silver data into analysis-ready fact and dimension tables. Each fact table is designed to drive a specific class of analytical question:
 
 | Gold table | Analytical use case |
 | --- | --- |
-| `fct_energy_demand` | Joins energy consumption with weather observations to analyse how temperature extremes drive heating and cooling demand; identify energy-vulnerable periods and regions |
+| `fct_energy_demand_daily` | Joins energy consumption with weather observations to analyse how temperature extremes drive heating and cooling demand; identify energy-vulnerable periods and regions |
 | `fct_temp_change_annual` | Annual temperature-change indicators by country; supports multi-decade warming trend visualisation and anomaly tracking against historical baselines |
 | `fct_land_cover_annual` | Year-over-year land cover transitions; enables deforestation detection, urbanisation tracking, and land-use change analysis |
-| `fct_forest_resilience` | Combines forest inventory with temperature signals; scores forest ecosystem resilience under climate stress to identify vulnerable areas |
-| `fct_ground_truth_audit` | Audit fact table; provides data-quality observability for pipeline monitoring dashboards |
+| `fct_forest_resilience_annual` | Combines forest inventory with temperature signals; scores forest ecosystem resilience under climate stress to identify vulnerable areas |
+| `fct_ground_truth_verification_daily` | Compares modelled Open-Meteo weather against NOAA station observations to quantify model reliability per country and station |
 | `dim_stations`, `dim_locations`, `dim_date`, `dim_koppen_zones` | Shared dimensions enabling cross-fact-table drill-downs by station, geography, time period, and Köppen climate zone (the standard climate classification system, used here to group regions by climate type for comparative analysis) |
 
-## Design Decisions for Free Edition
+## Why the Architecture Is This Way
 
-This project is built for **Databricks Free Edition**, which constrains several architectural choices:
+### Free Edition constraints are design inputs
 
-* **Full-reload Gold pipeline**: Free Edition does not support Delta Live Tables or incremental MERGE pipelines. Gold tables are dropped and recreated on each run via the orchestrator. This keeps the pipeline simple and idempotent at the cost of reprocessing the full Silver dataset each cycle.
-* **YAML-driven transforms**: Each Silver and Gold table is declared in a YAML config that specifies schema, source query, column comments, and transformation function. The orchestrators read these configs at runtime, keeping the pipeline declarative and avoiding hard-coded SQL.
-* **Notebook-based orchestration**: Each layer has a single orchestrator notebook (`silver_orchestrator`, `gold_orchestrator`) that iterates over its YAML configs and calls Python transform functions from `src/transforms/`. This replaces DLT-style declarative pipelines that are not available on Free Edition.
-* **Serverless compute**: Jobs auto-attach serverless compute. No cluster configuration is needed, but wall-clock time and concurrency limits apply.
-* **No streaming**: All ingestion is batch. Open-Meteo incremental notebooks fetch the latest available window on each run rather than maintaining a continuous stream.
+The platform runs on Databricks Free Edition, and its limits shaped the choices rather than being worked around:
 
-## Pipeline Architecture
+* **Serverless only**: no cluster configuration, but wall-clock time and concurrency limits apply, so nothing assumes long-running compute.
+* **Batch ingestion**: all Bronze ingestion is batch; the incremental Open-Meteo notebooks fetch the latest window on each run rather than maintaining a stream.
+* **Concurrency**: at most 5 concurrent job tasks and 1 active SDP pipeline per pipeline type, which is why the SDP Silver and Gold tables share a single pipeline.
+* **Egress restrictions**: several sources cannot be fetched directly, so they are uploaded manually to a UC Volume and ingested from there (patterns per source in the [Bronze README](pipelines/bronze/README.md)).
 
-### Data Flow
+### Every table is a YAML config
 
-Data flows through three layers, with each layer building on the previous one:
+Each Silver and Gold table is declared in a YAML file that names its sources, transform function, merge keys, watermark column, and column comments. This keeps the intent of each table (the config) separate from its implementation (`src/transforms/`), makes adding a table a config-file change rather than a code change, and gives AI/BI Genie its semantic context: the column comments declared in the configs are registered to Unity Catalog automatically. Because the configs are version-controlled, the data lineage map is reviewable in Git alongside the code.
 
-1. **Bronze (Ingestion)**: Raw data lands in Delta tables in `climate_energy_demand.bronze`. Open-Meteo notebooks pull weather data via API, driven by `reference_locations.csv` in the `/Volumes/climate_energy_demand/bronze/raw_uploads/` Unity Catalog Volume. OWID, NOAA, and FAOSTAT data is manually uploaded to the same Volume and then read into Delta tables. No cleaning or unit conversion happens here; raw data is preserved as-is with `ingested_at` and `source_file` metadata for traceability.
-2. **Silver (Standardisation)**: The `silver_orchestrator` notebook reads YAML configs from `pipelines/silver/configs/`, queries the corresponding Bronze tables, and calls Python transform functions from `src/transforms/` to normalise units, align temporal grains, clean cross-source inconsistencies, and build shared dimensions. Results land in `climate_energy_demand.silver`.
-3. **Gold (Analytics)**: The `gold_orchestrator` notebook reads YAML configs from `pipelines/gold/configs/`, queries Silver tables, and calls transform functions to build denormalised fact and dimension tables in `climate_energy_demand.gold`. Gold tables are fully rebuilt on each run.
+### The bundle manifest is the project inventory
 
-### Modular Build
+`databricks.yml` declares every job, the SDP pipeline, and the dashboard in one place. A single command (`databricks bundle deploy`) reproduces the entire setup in a workspace, changes are reviewed in Git before they reach the workspace, and the manifest is the one place to consult to see what exists.
 
-Each layer can run independently. This is a deliberate design choice:
+### Incremental where it pays, rebuild where it is simpler
 
-* **Bronze**: Each source has its own ingestion notebook (`01_ingest_openmeteo_historical`, `01_ingest_openmeteo_incremental`, `02_ingest_owid_energy`, `03_ingest_noaa_gsod`, `04_ingest_openmeteo_cmip6_projections`, `05_ingest_fao_data`). Trigger any one to refresh a single source.
-* **Silver**: A single orchestrator processes all Silver tables. Run it when Bronze data has changed.
-* **Gold**: A single orchestrator rebuilds all Gold tables from Silver. Run it when Silver transforms have been updated.
-* **Validation**: Each layer has a dedicated pytest validation job that runs on its own.
+Silver loads incrementally using watermarks stored in queryable Delta tables rather than opaque checkpoint files: data freshness can be inspected with SQL, state survives restarts, and the compute budget is spent only on new data. Gold rebuilds fully on each run because rebuilding a derived aggregate is simpler and safer than upserting it, and eliminates any possibility of drift from Silver.
 
-This modular design enables selective reprocessing (only re-run the layer that changed), independent testing during development, and flexible CI/CD. You can trigger the full end-to-end pipeline or just the slice that needs refreshing.
+For the decision records behind these choices, see the [architecture decision records](pipelines/silver/docs/architectural_decisions.md). For how these choices change on a paid tier, see the [roadmap](pipelines/silver/docs/roadmap.md).
 
-Each layer has its own README with table details:
+## Testing and Validation
 
-* [Bronze README](pipelines/bronze/README.md)
-* [Silver README](pipelines/silver/README.md)
-* [Gold README](pipelines/gold/README.md)
+Every layer has a pytest suite, run as a Databricks job through `src/tests/run_all_tests_notebook`:
 
-### Monitoring and Audit
+* **Infrastructure**: catalog, schemas, and audit tables exist.
+* **Bronze**: tables exist, are populated, and weather data is fresh (7-day threshold).
+* **Silver**: reasonable row counts, no null primary keys, temperatures genuinely in Celsius, no duplicate primary keys, the wide-to-long normalisation worked, and watermarking is functioning.
+* **Gold**: fact tables exist, business logic holds (DSI ≥ 0, carbon density correctness), primary keys are unique, referential integrity back to Silver holds, and model-vs-observation accuracy is checked per country (Greece's known station-grain bias is documented as a warning; see [ADR #8](pipelines/silver/docs/architectural_decisions.md#8-modelled-vs-observed-grain-mismatch-known-limitation)).
 
-A custom audit framework tracks every pipeline run. Execution metadata (run IDs, table names, row counts, durations) is persisted to Delta tables in `climate_energy_demand.monitoring`: `pipeline_runs` for job execution tracking and `test_results` for individual test outcomes. Bootstrap verification is handled by `setup/verify_bootstrap.sql`. See `pipelines/consumption/monitoring/design_doc.md` for the full schema and dashboard build guide.
+Validation runs are smart: they compare the last data load against the last validation run and skip when nothing has changed, which saves compute on Free Edition. The suites have caught real problems that job status alone never showed: null primary keys, a physically impossible 5,537°C maximum temperature, and duplicate rows introduced by MERGEs. The full guide, including how to run the tests and customise thresholds: [src/tests README](src/tests/README.md).
+
+Every orchestrator and validation run also writes to `climate_energy_demand.monitoring`: `pipeline_runs` (per-task and per-table outcomes) and `test_results` (one row per test function with parsed, readable errors). The AI/BI monitoring dashboard reads these tables. Full schema and dashboard queries: [monitoring design doc](pipelines/consumption/monitoring/design_doc.md).
 
 ## Getting Started
 
@@ -85,7 +118,7 @@ A custom audit framework tracks every pipeline run. Execution metadata (run IDs,
 
 1. **Deploy the bundle**: Run `databricks bundle deploy` from the CLI, or deploy via the Databricks UI. This creates the jobs defined in `databricks.yml`.
 
-2. **Bootstrap infrastructure**: Run the `project_bootstrap` job once. This creates the `climate_energy_demand` catalog, schemas (bronze, silver, gold, monitoring), and audit and monitoring tables. It is idempotent (`IF NOT EXISTS`).
+2. **Bootstrap infrastructure**: Run the `project_bootstrap` job once. This creates the `climate_energy_demand` catalog, schemas (bronze, silver, gold, silver_sdp, gold_sdp, monitoring), and audit and monitoring tables. It is idempotent (`IF NOT EXISTS`).
 
 3. **Ingest Bronze data**: Run the Bronze ingestion notebooks. Open-Meteo notebooks pull data via API automatically. For OWID, NOAA, and FAOSTAT, download the source files and upload them to `/Volumes/climate_energy_demand/bronze/raw_uploads/`, then run the corresponding ingestion notebook.
 
@@ -104,7 +137,7 @@ A custom audit framework tracks every pipeline run. Execution metadata (run IDs,
 | `silver_data_load` + `silver_validation` | Silver orchestrator only, then validation | When bronze data changed |
 | `gold_data_load` + `gold_validation` | Gold orchestrator only, then validation | When re-running gold transforms |
 
-The modular jobs are decoupled; trigger each manually. The full pipeline chains everything with task dependencies so a single trigger runs all steps in sequence. Bronze validation uses `run_if: ALL_DONE` so stale data is flagged without blocking the pipeline.
+The modular jobs are decoupled; trigger each manually. The full pipeline chains everything with task dependencies so a single trigger runs all steps in sequence. Bronze validation uses `run_if: ALL_DONE` so stale data is flagged without blocking the pipeline. The SDP pipeline (`silver_gold_sdp`) is a separate bundle resource: deploy creates it, and you start it manually from the Pipelines page.
 
 ## Intelligence Layer: Current State and Next Steps
 
@@ -133,12 +166,14 @@ climate-analytics
 │   │   ├── configs/                   # YAML declarative table definitions
 │   │   ├── docs/                     # Design, architectural decisions, roadmap
 │   │   ├── silver_orchestrator       # Centralised execution engine (notebook)
+│   │   ├── silver_sdp.py             # SDP source file (declarative silver tables)
 │   │   └── setup_silver.sql           # Creates silver.ingestion_audit table
 │   ├── gold/                         # Aggregated analytics fact tables
 │   │   ├── configs/                   # YAML table definitions (facts + dimensions)
 │   │   ├── docs/                     # Design doc and architecture logic
 │   │   ├── source_to_target_mappings/  # Lineage CSVs (Silver to Gold)
 │   │   ├── gold_orchestrator         # Config-driven transformation runner (notebook)
+│   │   ├── gold_sdp.py               # SDP source file (declarative gold materialized views)
 │   │   └── setup_gold.sql            # Creates gold.ingestion_audit table
 │   └── consumption/
 │       └── monitoring/               # Monitoring table setup and dashboard design doc
@@ -146,12 +181,13 @@ climate-analytics
 │   ├── transforms/                   # Domain-specific transformation modules
 │   ├── common/                       # Shared utilities (audit, shared logic)
 │   └── tests/                        # pytest suites (bronze, silver, gold, infrastructure)
+├── pipeline_approaches.md            # Notebook vs SDP comparison, coexistence rules, exit criteria
 ├── dashboard/                        # AI/BI Dashboard (.lvdash.json)
 ├── requirements.txt                  # Python dependencies
 └── README.md
 ```
 
-- `setup/`: Two SQL scripts. `project_infrastructure.sql` creates the `climate_energy_demand` catalog, all schemas (bronze, silver, gold, monitoring), and monitoring tables. `verify_bootstrap.sql` checks that the infrastructure exists before pipeline jobs are run.
+- `setup/`: Two SQL scripts. `project_infrastructure.sql` creates the `climate_energy_demand` catalog and all schemas (bronze, silver, gold, silver_sdp, gold_sdp, monitoring). `verify_bootstrap.sql` checks that the infrastructure exists before pipeline jobs are run.
 - `pipelines/bronze/`: Source-specific ingestion notebooks. Data is driven by `reference_locations.csv` stored in the `/Volumes/climate_energy_demand/bronze/raw_uploads/` Unity Catalog Volume. See [Bronze README](pipelines/bronze/README.md) for the full source catalogue.
 - `pipelines/silver/`: YAML configs, the orchestrator notebook, and `setup_silver.sql` (creates the `silver.ingestion_audit` table for watermark tracking). See [Silver README](pipelines/silver/README.md) for table details.
 - `pipelines/gold/`: YAML configs, the orchestrator notebook, source-to-target mapping CSVs, and `setup_gold.sql` (creates the `gold.ingestion_audit` table for watermark tracking). See [Gold README](pipelines/gold/README.md) for table details.
@@ -161,3 +197,24 @@ climate-analytics
 - `src/tests/`: `test_infrastructure.py` (bootstrap verification), `test_bronze_tables.py`, `test_silver_tables.py`, `test_gold_tables.py`, `test_shared_logic.py`, and `test_audit_utils.py`. A `run_all_tests_notebook` notebook is provided for running tests inside Databricks.
 - `dashboard/`: AI/BI Dashboard definition deployed as a bundle resource.
 - `requirements.txt`: Python libraries required for the project.
+
+## Documentation Map
+
+Every document in the repository, one line each:
+
+| Document | What it covers |
+| --- | --- |
+| [Pipeline Approaches](pipeline_approaches.md) | Notebook orchestration vs SDP: comparison, coexistence rules, exit criteria, when to use which |
+| [Bronze README](pipelines/bronze/README.md) | Per-source ingestion design: patterns, resilience, Free Edition workarounds |
+| [Silver README](pipelines/silver/README.md) | Silver layer architecture and table catalogue |
+| [Silver design doc](pipelines/silver/docs/design_doc.md) | Orchestration flow, degree-day logic, data quality fixes |
+| [Architecture decision records](pipelines/silver/docs/architectural_decisions.md) | ADRs 1-8 and the config file walkthroughs |
+| [Roadmap](pipelines/silver/docs/roadmap.md) | Free Edition to paid tier evolution path |
+| [Gold README](pipelines/gold/README.md) | Gold layer architecture and the table registry |
+| [Gold design doc](pipelines/gold/docs/design_doc.md) | Per-fact-table engineering logic and metrics |
+| [Gold architecture logic](pipelines/gold/docs/architecture_logic.md) | Data flow patterns, performance optimisations, Genie integration |
+| [Source-to-target mappings](pipelines/gold/source_to_target_mappings/gold_source_to_target_mappings.md) | Column-level lineage from Silver to Gold |
+| [Monitoring design doc](pipelines/consumption/monitoring/design_doc.md) | Monitoring table schema, design decisions, dashboard queries |
+| [Tests README](src/tests/README.md) | Test suite guide: what is validated, how to run, how to customise |
+| Genie space guide (TODO: link) | To be added |
+| Climate domain notes (TODO: link) | To be added |

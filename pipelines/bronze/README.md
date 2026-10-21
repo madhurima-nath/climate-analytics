@@ -8,7 +8,7 @@ The Bronze layer is architected as a **Raw Mirror** of the source systems to ens
 *   **1-to-1 Mapping:** Every source file or API response is stored in a corresponding Delta table to preserve data lineage.
 *   **Immutability:** Data is persisted in its native format. No cleaning, filtering, or unit conversions are performed here. All raw "quirks" (e.g., Fahrenheit units, non-standard headers, and API-specific flags) are preserved.
 *   **Lineage Enrichment:** Every record is enriched with `ingested_at` (timestamp) and `source_file` (metadata path/URL) to ensure 100% traceability.
-*   **Global/Decoupled Scaling:** Ingestion is **data-driven** via `reference_locations.csv`, allowing the pipeline to scale from a few regions to 250+ global territories without code modification.
+*   **Location-Driven Scaling:** Ingestion is driven by `reference_locations.csv`: adding a territory means adding a row, not code, which is how the pipeline scales from a few regions to 250+ global territories.
 
 
 ## 2. Infrastructure Constraints & Resiliency

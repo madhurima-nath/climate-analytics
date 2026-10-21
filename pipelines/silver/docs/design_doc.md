@@ -12,7 +12,7 @@ Modular Jobs (Run independently):
 ┌─────────────────────────────────────────────────────────────────┐
 │  Prerequisite: project_bootstrap (one-time)                     │
 │  └─> Creates catalog, schemas, audit tables, monitoring tables   │
-│      (includes setup_silver.sql — creates ingestion_audit table) │
+│      (includes setup_silver.sql: creates ingestion_audit table) │
 └─────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────┐
@@ -158,7 +158,7 @@ Full Pipeline (chains all layers for CI/CD):
        │  • Wide-to-long pivot
        ▼
 ┌─────────────┐
-│   Silver    │  Cleaned & standardized layer
+│   Silver    │  Cleaned & standardised layer
 │   Tables    │  • weather_historical
 └─────────────┘  • energy_metrics
                  • forest_inventory_annual
@@ -187,7 +187,7 @@ To model the energy demand required for climate control, we implement a "Neutral
 
 ## 2. Data Quality: NOAA GSOD Precipitation Sentinel
 
-**Issue:** NOAA GSOD uses `99.99` inches as the missing-data indicator for precipitation. The silver transform (`weather.py: process_weather_observations`) was not filtering this, converting it to `2539.75mm` — a physically impossible value stored as real precipitation.
+**Issue:** NOAA GSOD uses `99.99` inches as the missing-data indicator for precipitation. The silver transform (`weather.py: process_weather_observations`) was not filtering this, converting it to `2539.75mm`, a physically impossible value stored as real precipitation.
 
 **Impact:** 14,952 rows (8.4%) across 148 of 221 stations (67%). Missing data is evenly spread across all 12 months (7.9 to 9.1% per month). 5 stations had >50% missing precipitation.
 

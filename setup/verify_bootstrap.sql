@@ -10,7 +10,7 @@ LIMIT 1;
 SELECT 'schema' AS component, CONCAT(catalog_name, '.', schema_name) AS object_name, 'OK' AS status
 FROM climate_energy_demand.information_schema.schemata
 WHERE catalog_name = 'climate_energy_demand'
-  AND schema_name IN ('bronze', 'silver', 'gold', 'monitoring')
+  AND schema_name IN ('bronze', 'silver', 'gold', 'silver_sdp', 'gold_sdp', 'monitoring')
 ORDER BY schema_name;
 
 SELECT 'table' AS component, CONCAT(table_catalog, '.', table_schema, '.', table_name) AS object_name, 'OK' AS status

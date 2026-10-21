@@ -78,11 +78,17 @@ def create_dim_stations(sources: dict, params: dict) -> DataFrame:
     """
     df = sources["noaa_raw"]
     
-    # Get unique stations with their latest metadata
-    window_spec = Window.partitionBy("station_id").orderBy(F.col("ingested_at").desc())
-    stations = df.withColumn("rn", F.row_number().over(window_spec)) \
-                 .filter("rn = 1") \
-                 .drop("rn")
+    # Get unique stations with their latest metadata.
+    # skip_dedup (default False) defers latest-per-station selection to the
+    # caller's upsert mechanism (e.g. SDP apply_changes) because window functions
+    # cannot run on streaming DataFrames. Batch callers are unaffected.
+    if params.get("skip_dedup", False):
+        stations = df
+    else:
+        window_spec = Window.partitionBy("station_id").orderBy(F.col("ingested_at").desc())
+        stations = df.withColumn("rn", F.row_number().over(window_spec)) \
+                     .filter("rn = 1") \
+                     .drop("rn")
     
     return stations.select(
         "station_id",

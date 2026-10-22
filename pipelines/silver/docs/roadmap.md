@@ -61,7 +61,7 @@
         *   `gold_data_load` (notebook task that runs the gold orchestrator)
         *   `gold_validation` (notebook task that runs the pytest suite)
         *   `climate_data_pipeline` (full end-to-end: bronze validate → silver load → silver validate → gold load → gold validate)
-    *   **Approach B (SDP):** A single Lakeflow Spark Declarative Pipeline combining Silver streaming tables and Gold materialized views. Supported on Free Edition with a limit of one active pipeline per pipeline type.
+    *   **Approach B (SDP):** A single Lakeflow Spark Declarative Pipeline combining Silver streaming tables (with `weather_historical` as a materialized view, ADR #9) and Gold materialized views. Supported on Free Edition with a limit of one active pipeline per pipeline type. First full update completed and row-count parity validated 21 October 2026.
 *   Both approaches share the same `src/transforms/*.py` modules and read from the same Bronze tables.
 *   For a detailed comparison, see [Pipeline Approaches](../../../pipeline_approaches.md).
 *   **Audit:** Delta table `climate_energy_demand.silver.ingestion_audit` tracks watermarks and row counts (Approach A). SDP uses automatic checkpointing (Approach B).

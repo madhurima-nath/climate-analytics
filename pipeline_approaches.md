@@ -4,7 +4,7 @@ This document describes the two supported approaches for processing the Silver a
 
 The Bronze layer (API-based ingestion) is **not** converted to SDP and remains notebook-based in both approaches. SDP consumes the Bronze Delta tables as read-only sources.
 
-> **Position.** This is not an open-ended choice between two equivalent options. Notebook Orchestration (A) is the **production baseline** and remains authoritative for `silver`/`gold` until the migration completes. SDP (B) is the **strategic direction**, running in an isolated parallel lane (`silver_sdp`/`gold_sdp`) until the exit criteria in [Coexistence Strategy](#coexistence-strategy) are met. The SDP lane is built but has not yet been validated side-by-side against the baseline.
+> **Position.** This is not an open-ended choice between two equivalent options. Notebook Orchestration (A) is the **production baseline** and remains authoritative for `silver`/`gold` until the migration completes. SDP (B) is the **strategic direction**, running in an isolated parallel lane (`silver_sdp`/`gold_sdp`) until the exit criteria in [Coexistence Strategy](#coexistence-strategy) are met. The SDP lane is deployed, its first full update completed on 21 October 2026, and row-count parity against the baseline is validated (evidence in [Exit Criteria](#exit-criteria-when-coexistence-ends)); the remaining exit criteria are still open.
 
 ## Why the SDP Lane Exists
 
@@ -115,9 +115,9 @@ Rather than rewrite a working, tested platform, the SDP lane was added alongside
 │  (one active pipeline per type, Free Edition constraint)       │
 │                                                                 │
 │  ┌─────────────────────────────────────────────────────────┐   │
-│  │  @dlt.streaming_table (Silver)                           │   │
+│  │  @dlt.table (Silver streaming)                           │   │
 │  │                                                           │   │
-│  │  • dlt.read_stream(bronze_table)                         │   │
+│  │  • spark.readStream.table(bronze)                        │   │
 │  │  • src.transforms.{module}.{function}(sources, params)   │   │
 │  │  • Automatic checkpointing (replaces manual watermarks)  │   │
 │  │  • Merge keys declared in APPLY CHANGES or table def     │   │
@@ -125,7 +125,7 @@ Rather than rewrite a working, tested platform, the SDP lane was added alongside
 │  │  → Writes to: climate_energy_demand.silver_sdp.*         │   │
 │  └───────────────────────┬─────────────────────────────────┘   │
 │                          │                                       │
-│  │  @dlt.materialized_view (Gold)                          │   │
+│  │  @dlt.table (Gold, batch read)                          │   │
 │  │                                                           │   │
 │  │  • dlt.read(silver_sdp_table), full read                 │   │
 │  │  • src.transforms.{module}.{function}(sources, params)   │   │
@@ -143,9 +143,9 @@ Rather than rewrite a working, tested platform, the SDP lane was added alongside
 
 | Component | Location | Role |
 | --- | --- | --- |
-| SDP Source (Silver) | `pipelines/silver/silver_sdp.py` | `@dlt.streaming_table` declarations for each silver table |
-| SDP Source (Gold) | `pipelines/gold/gold_sdp.py` | `@dlt.materialized_view` declarations for each gold table |
-| Transform Functions | `src/transforms/*.py` | Reused as-is: the same pure PySpark functions called from SDP decorators |
+| SDP Source (Silver) | `pipelines/silver/silver_sdp.py` | `@dlt.table` declarations for each silver table: streaming reads plus `dlt.apply_changes` upserts, with `weather_historical` as a materialized view |
+| SDP Source (Gold) | `pipelines/gold/gold_sdp.py` | `@dlt.table` declarations (batch reads) that create materialized views for each gold table |
+| Transform Functions | `src/transforms/*.py` | Reused with backward-compatible changes: the same functions called from SDP table definitions, with optional parameters for streaming-safe behaviour |
 | Pipeline Resource | `databricks.yml` → `resources.pipelines` | Single pipeline definition referencing both source files |
 | Monitoring | SDP event log (Delta table) | Built-in: flow progress, data quality, lineage, errors |
 
@@ -164,11 +164,19 @@ Rather than rewrite a working, tested platform, the SDP lane was added alongside
 
 | Component | How it is reused |
 | --- | --- |
-| `src/transforms/*.py` (6 modules) | Imported and called inside `@dlt` decorated functions, unchanged |
+| `src/transforms/*.py` (6 modules) | Imported and called inside `@dlt` table functions; optional parameters added for the SDP lane, notebook defaults preserved |
 | `src/common/shared_logic.py` | Imported as needed, unchanged |
 | Bronze ingestion notebooks | Remain as Lakeflow Job tasks (API calls) |
 | `setup/project_infrastructure.sql` | Still creates catalog, schemas, monitoring tables |
 | YAML configs | Kept as metadata reference; logic moves into SDP source code |
+
+### SDP Lane Adaptations
+
+Sharing the batch-written transforms with a declarative pipeline required three adaptations, all validated in the first full run:
+
+* **Dataset type follows source semantics.** A table function reading with `spark.readStream` becomes a streaming table; one reading with `dlt.read`/`spark.read` becomes a materialized view. `weather_historical` is an MV in this lane because its transform uses window functions that streaming flows do not support. A consequence to remember: changing a dataset's type (streaming table to MV) on the same name requires manually dropping the old artifact, because SDP rejects the change with `CANNOT_CHANGE_DATASET_TYPE`.
+* **Stream-incompatible logic is parameterised, not forked.** `create_dim_stations` runs here with `skip_dedup=True`, the window-based deduplication replaced by `dlt.apply_changes` keys; the notebook orchestrator keeps the full batch logic through the same function and its default flags.
+* **UDFs from shared modules are rebound by value.** Cloudpickle serialises a UDF that wraps a module-level function by reference, which fails on pipeline workers that cannot import `src`. `gold_sdp.py` rebinds the Köppen classification UDF to a wrapper defined in the pipeline source that imports the original at call time.
 
 ### Free Edition Constraints
 
@@ -188,7 +196,7 @@ Rather than rewrite a working, tested platform, the SDP lane was added alongside
 
 ### Cons
 
-* **No failure isolation between layers:** If a Silver table fails, the pipeline update stops and Gold MVs in the same update will not run.
+* **No failure isolation between layers:** If a table fails, the update is marked failed and its dependent tables are blocked; independent tables in the same update may still complete, but the update must be re-run to pick up the blocked ones.
 * **No independent scheduling:** One pipeline update triggers all tables; cannot run Silver without Gold.
 * **One active pipeline limit:** Free Edition allows one active SDP pipeline; cannot run separate Silver/Gold pipelines.
 * **Event log learning curve:** Monitoring queries shift from the custom `pipeline_runs` schema to the `event_log()` table-valued function.
@@ -210,7 +218,7 @@ Rather than rewrite a working, tested platform, the SDP lane was added alongside
 | --- | --- | --- |
 | **State management** | Manual watermarks (`ingestion_audit` table) | Automatic SDP checkpoints |
 | **Cross-layer deps** | Job task chaining (`depends_on`) | Automatic (SDP resolves graph) |
-| **Failure isolation** | Per-layer (Silver and Gold independent) | Per-pipeline (Silver failure stops Gold) |
+| **Failure isolation** | Per-layer (Silver and Gold independent) | Per-pipeline (a failed table blocks its dependents and fails the update) |
 | **Scheduling** | Per-layer (independent triggers) | Per-pipeline (one update triggers all) |
 | **Data quality** | Separate pytest validation job | `@dlt.expectations` inline + optional pytest |
 | **Monitoring** | `pipeline_runs` custom table | `event_log()` built-in table |
@@ -271,6 +279,11 @@ Coexistence ends, and the notebook orchestrators for Silver and Gold retire to r
 5. **Rollback documented.** Disabling the pipeline and dropping the `_sdp` schemas returns the platform to the notebook path with no residue.
 
 Until then, `silver` and `gold` remain the authoritative tables, and the dashboard, Genie, and tests keep reading from them.
+
+### Validation Status
+
+* **Output parity (criterion 1): row-count parity validated, 21 October 2026.** Row counts compared across all 19 tables for the same Bronze snapshot: all 19 matched exactly, including every Gold table. One initial mismatch resolved by cleaning the notebook lane: `silver.energy_metrics` held 1,201 extra legacy rows with NULL `iso_code`, because the orchestrator's MERGE never matches NULL keys and re-inserted those rows on every re-upload (notebook-side drift, not an SDP shortfall). The rows were deleted on 21 October 2026; both lanes now hold 3,367 rows and the current transform produces no NULL-key rows, so the drift cannot recur. Checksum (content) comparison is still to run.
+* **Criteria 2 to 5 (monitoring, quality, refresh behaviour, rollback): open.** Row tracking was enabled on `bronze.openmeteo_weather` on 21 October 2026, resolving the advisory that `silver_sdp.weather_historical` refreshes in full; incremental MV refresh is expected from the next update onward.
 
 ---
 

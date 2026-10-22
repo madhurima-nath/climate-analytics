@@ -203,6 +203,32 @@ resources:
               layer: "gold"
               task_key: "validate_gold_data"
 
+  # === SDP PIPELINE (Silver + Gold Declarative Pipeline) ===
+  # Coexists with the notebook-based jobs above. Writes to separate schemas
+  # (silver_sdp, gold_sdp) to avoid table conflicts.
+  # See pipeline_approaches.md for the comparison and when to use which.
+  pipelines:
+    silver_gold_sdp:
+      name: "Climate: Silver+Gold SDP Pipeline"
+      catalog: climate_energy_demand
+      target: silver_sdp
+
+      libraries:
+        # glob is the unified library field; it cannot be mixed with file/notebook entries.
+        - glob:
+            include: ./pipelines/silver/silver_sdp.py
+        - glob:
+            include: ./pipelines/gold/gold_sdp.py
+        - glob:
+            include: ./src/transforms/**
+        - glob:
+            include: ./src/common/**
+
+      serverless: true
+      photon: true
+      channel: current
+      continuous: false
+
   dashboards:
     # === CLIMATE ANALYSIS DASHBOARD ===
     # The .lvdash.json file is tracked in Git at dashboard/Climate Analysis Dashboard.lvdash.json.
@@ -216,6 +242,7 @@ resources:
 
 targets:
   dev:
+    mode: development
     workspace:
       host: "https://dbc-48f6ffe7-ea99.cloud.databricks.com"
     variables:

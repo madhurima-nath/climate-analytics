@@ -40,7 +40,7 @@ gold/
 
 The Gold layer supports two coexisting orchestration approaches, both available on Free Edition:
 * **Notebook Orchestration (existing):** The `gold_orchestrator` notebook processes all YAML configs, performing full-reload (overwrite) on each run. Gold tables are derived aggregates of Silver, so a full rebuild is simpler and safer than incremental upserts: there is no merge state to drift, and Silver remains the single source of truth. Monitoring writes to `climate_energy_demand.monitoring.pipeline_runs`.
-* **Declarative Pipelines (SDP):** Gold tables can be declared as `@dlt.materialized_view` in an SDP source file, with automatic dependency resolution on upstream Silver streaming tables. Monitoring uses the SDP event log.
+* **Declarative Pipelines (SDP):** Gold tables are declared as `@dlt.table` (batch reads) in an SDP source file, producing materialized views with automatic dependency resolution on upstream Silver tables. Monitoring uses the SDP event log. The Köppen classification UDF from `src.transforms.climate` is rebound to a by-value wrapper in `gold_sdp.py` so it executes on pipeline workers.
 
 Both approaches share the same `src/transforms/*.py` modules. For a full comparison and the coexistence exit criteria, see [Pipeline Approaches](../../pipeline_approaches.md).
 

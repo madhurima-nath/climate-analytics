@@ -76,7 +76,7 @@ This project is deployed as a Declarative Automation Bundle.
 **Pipeline Approaches**:
 The Silver layer supports two coexisting orchestration approaches, both available on Free Edition:
 * **Notebook Orchestration:** The `silver_orchestrator` notebook processes all YAML configs in a single run. This is the existing approach, deployed as the `silver_data_load` job.
-* **Declarative Pipelines (SDP):** Silver tables can also be declared as `@dlt.streaming_table` in an SDP source file, with automatic checkpointing replacing the manual watermark system. Limited to one active pipeline per type on Free Edition.
+* **Declarative Pipelines (SDP):** Silver tables are declared as `@dlt.table` in an SDP source file, with streaming reads and `dlt.apply_changes` upserts; automatic checkpointing replaces the manual watermark system. Two tables differ from the notebook lane by design: `weather_historical` is a materialized view because its transform uses window functions that streaming flows do not support, and `dim_stations` runs with `skip_dedup=True` because its keys are enforced by `dlt.apply_changes`. Limited to one active pipeline per type on Free Edition.
 
 Both approaches share the same `src/transforms/*.py` modules. For a full comparison and the coexistence exit criteria, see [Pipeline Approaches](../../pipeline_approaches.md).
 

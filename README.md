@@ -208,7 +208,7 @@ Every document in the repository, one line each:
 | [Bronze README](pipelines/bronze/README.md) | Per-source ingestion design: patterns, resilience, Free Edition workarounds |
 | [Silver README](pipelines/silver/README.md) | Silver layer architecture and table catalogue |
 | [Silver design doc](pipelines/silver/docs/design_doc.md) | Orchestration flow, degree-day logic, data quality fixes |
-| [Architecture decision records](pipelines/silver/docs/architectural_decisions.md) | ADRs 1-8 and the config file walkthroughs |
+| [Architecture decision records](pipelines/silver/docs/architectural_decisions.md) | ADRs 1-11 and the config file walkthroughs |
 | [Roadmap](pipelines/silver/docs/roadmap.md) | Free Edition to paid tier evolution path |
 | [Gold README](pipelines/gold/README.md) | Gold layer architecture and the table registry |
 | [Gold design doc](pipelines/gold/docs/design_doc.md) | Per-fact-table engineering logic and metrics |

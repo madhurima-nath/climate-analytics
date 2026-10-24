@@ -133,6 +133,7 @@ This test suite provides **intelligent, incremental validation** that only runs 
 - ✅ **MERGE Logic**: Audit watermarking is functioning
 - ✅ **Data Quality**: Year ranges (≥2010), date continuity, dimension completeness
 - ✅ **Relational Normalisation**: Wide-to-long format transformation (y1990 → observation_year)
+- ✅ **Lane Content Parity**: Notebook and SDP lane tables are identical on all business columns (`test_lane_parity.py`)
 
 ## Test Files
 
@@ -205,6 +206,13 @@ Shared pytest fixtures and configuration:
 - Spark session setup
 - Table name constants
 - Common test helpers
+
+### 8. `test_lane_parity.py`
+
+Migration exit-criterion evidence: verifies that all 19 Silver and Gold table pairs are identical between the notebook lane (`silver`/`gold`) and the SDP lane (`silver_sdp`/`gold_sdp`):
+- Compares business columns only; orchestrator audit columns (`_loaded_at`, `_run_id`, `_updated_at`) are excluded and listed in the file
+- Symmetric `exceptAll` (multiset semantics) plus row counts, so any differing or duplicated row fails
+- `run_full_comparison(spark)` prints the one-line-per-table result used in the Validation Record
 
 ## Running Tests
 

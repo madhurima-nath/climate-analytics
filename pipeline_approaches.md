@@ -272,18 +272,20 @@ A dashboard can combine both sources: for example, a Silver status widget from `
 
 Coexistence ends, and the notebook orchestrators for Silver and Gold retire to reference status, when **all** of the following are evidenced:
 
-1. **Output parity.** Row counts and checksums per table match between `silver`/`gold` and `silver_sdp`/`gold_sdp` for the same Bronze snapshot.
-2. **Monitoring parity.** `event_log()` queries reproduce the run-status, duration, and per-table views the existing dashboard derives from `pipeline_runs`.
-3. **Quality parity.** SDP expectations, or the existing pytest suites pointed at the `_sdp` schemas, cover the current validation scope.
-4. **Refresh behaviour validated.** A materialized view full refresh reproduces the notebook full-reload semantics, including backfills.
-5. **Rollback documented.** Disabling the pipeline and dropping the `_sdp` schemas returns the platform to the notebook path with no residue.
+1. **Output parity.** Row counts and checksums per table match between `silver`/`gold` and `silver_sdp`/`gold_sdp` for the same Bronze snapshot. *Evidenced by:* a per-table comparison over all 19 table pairs, each run and its result logged in the [Validation Record](#validation-record).
+2. **Monitoring parity.** `event_log()` queries reproduce the run-status, duration, and per-table views the existing dashboard derives from `pipeline_runs`. *Evidenced by:* the `event_log()` queries added to the unified dashboard alongside the `pipeline_runs` widgets (see the [monitoring design doc](pipelines/consumption/monitoring/design_doc.md)).
+3. **Quality parity.** SDP expectations, or the existing pytest suites pointed at the `_sdp` schemas, cover the current validation scope. *Evidenced by:* `test_silver_tables.py` and `test_gold_tables.py` executed against the `_sdp` schemas, or expectations declared in the SDP source files.
+4. **Refresh behaviour validated.** A materialized view full refresh reproduces the notebook full-reload semantics, including backfills. *Evidenced by:* one update started after new Bronze data, the `_sdp` tables compared against a notebook full reload of the same data, and the outcome logged in the [Validation Record](#validation-record).
+5. **Rollback documented.** Disabling the pipeline and dropping the `_sdp` schemas returns the platform to the notebook path with no residue. *Evidenced by:* the rollback procedure written in this document.
 
 Until then, `silver` and `gold` remain the authoritative tables, and the dashboard, Genie, and tests keep reading from them.
 
-### Validation Status
+### Validation Record
 
-* **Output parity (criterion 1): row-count parity validated, 21 October 2026.** Row counts compared across all 19 tables for the same Bronze snapshot: all 19 matched exactly, including every Gold table. One initial mismatch resolved by cleaning the notebook lane: `silver.energy_metrics` held 1,201 extra legacy rows with NULL `iso_code`, because the orchestrator's MERGE never matches NULL keys and re-inserted those rows on every re-upload (notebook-side drift, not an SDP shortfall). The rows were deleted on 21 October 2026; both lanes now hold 3,367 rows and the current transform produces no NULL-key rows, so the drift cannot recur. Checksum (content) comparison is still to run.
-* **Criteria 2 to 5 (monitoring, quality, refresh behaviour, rollback): open.** Row tracking was enabled on `bronze.openmeteo_weather` on 21 October 2026, resolving the advisory that `silver_sdp.weather_historical` refreshes in full; incremental MV refresh is expected from the next update onward.
+One-off checks are logged here with method and result, so that nothing runs undocumented.
+
+* **21 October 2026, row-count parity (criterion 1).** All 19 table pairs were compared between the notebook and SDP lanes for the same Bronze snapshot. First pass: 18 of 19 exact matches; `silver.energy_metrics` alone differed (notebook 4,568 vs SDP 3,367). Diagnosis: `process_energy_metrics` recomputed batch over the same Bronze returned 3,367 rows, matching the SDP lane exactly, so the notebook table's extra 1,201 rows were legacy drift: rows with NULL `iso_code`, re-inserted on every re-upload because the orchestrator's MERGE predicate never matches NULL keys. Remediation the same day: the NULL-key rows were deleted from `silver.energy_metrics`; verified 3,367 rows with 0 NULL-key rows, identical to `silver_sdp.energy_metrics`. Result: 19 of 19 table pairs match on row counts. The content-checksum comparison that completes criterion 1 will be logged here when run.
+* **21 October 2026, MV incremental refresh enabled.** `delta.enableRowTracking` set to `true` on `climate_energy_demand.bronze.openmeteo_weather` (verified via `SHOW TBLPROPERTIES`), in response to the SDP advisory that `silver_sdp.weather_historical` was refreshing in full. The materialized view can refresh incrementally from the next update onward.
 
 ---
 

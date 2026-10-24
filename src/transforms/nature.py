@@ -228,7 +228,14 @@ def process_forest_resilience(sources: dict, params: dict) -> DataFrame:
         F.sum(
             F.when(F.col("temp_max_c") > 30.0, 1).otherwise(0)
         ).alias("extreme_heat_days_count"),
-        F.avg("temp_mean_c").alias("avg_temp_c")
+        # Rounded to 1 decimal (ADR #11): annual mean temperature is a
+        # presentation metric; sub-decimal digits are floating-point summation
+        # residue that differs between execution plans and breaks lane parity.
+        # The average runs on DECIMAL, not DOUBLE: decimal addition is exact
+        # and order-independent, so an .X5 rounding boundary resolves the same
+        # way in every execution plan (a plain-double mean flipped Belarus
+        # 2019 between 8.5 and 8.6 across lanes).
+        F.round(F.avg(F.col("temp_mean_c").cast("decimal(18,4)")), 1).cast("double").alias("avg_temp_c")
     ).withColumnRenamed("country", "country_name")
 
     # 3. Join forest inventory with weather stressors on country + year

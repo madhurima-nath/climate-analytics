@@ -2,6 +2,16 @@
 from pyspark.sql import DataFrame, Window
 import pyspark.sql.functions as F
 
+# GSOD reports these stations under two country names for the same dates,
+# with identical ingested_at (single bulk load), so "latest per station"
+# cannot resolve them deterministically. Resolved to the current
+# affiliation (ADR #10) so both lanes produce the same stable value.
+STATION_COUNTRY_OVERRIDES = {
+    "40190099999": "Israel",  # also listed as Gaza Strip
+    "61998099999": "French Southern Territories",  # also listed as Heard Island and McDonald Islands
+    "78862599999": "Montserrat",  # also listed as Guadeloupe
+}
+
 def process_weather_historical(sources: dict, params: dict) -> DataFrame:
     """
     Standardizes Open-Meteo historical data.
@@ -90,6 +100,17 @@ def create_dim_stations(sources: dict, params: dict) -> DataFrame:
                      .filter("rn = 1") \
                      .drop("rn")
     
+    # Resolve GSOD dual-affiliation stations to one deterministic country
+    # (ADR #10); applies to both dedup paths and the SDP lane (skip_dedup).
+    stations = stations.withColumn(
+        "country",
+        F.coalesce(
+            *[F.when(F.col("station_id") == sid, F.lit(c))
+              for sid, c in STATION_COUNTRY_OVERRIDES.items()],
+            F.col("country"),
+        ),
+    )
+
     return stations.select(
         "station_id",
         "station_name",

@@ -275,6 +275,11 @@ elif layer == "gold":
             "name": "Shared Logic",
             "file": "test_shared_logic.py",
             "html_report": None
+        },
+        {
+            "name": "Lane Content Parity (notebook vs SDP)",
+            "file": "test_lane_parity.py",
+            "html_report": None
         }
     ]
 elif layer == "silver":

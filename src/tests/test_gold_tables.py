@@ -11,6 +11,17 @@ import os
 # Import project modules for validation
 from src.common.audit_utils import get_last_watermark
 
+# Lane switch (migration exit criterion 3, quality parity): set the
+# TEST_LANE_SUFFIX environment variable to "_sdp" to run this suite against
+# the SDP lane schemas (gold_sdp reading silver_sdp) instead of the notebook
+# lane (gold reading silver). Unset (default) keeps the original behaviour,
+# so the DAB validation jobs are unaffected. Notebook-lane infrastructure
+# tests (audit tables) are skipped in _sdp mode: SDP uses pipeline
+# checkpoints, so the audit table does not exist there.
+LANE_SUFFIX = os.environ.get("TEST_LANE_SUFFIX", "")
+GOLD = f"gold{LANE_SUFFIX}"
+SILVER = f"silver{LANE_SUFFIX}"
+
 # =============================================================================
 # FIXTURES
 # =============================================================================
@@ -23,41 +34,41 @@ from src.common.audit_utils import get_last_watermark
 
 # All gold tables that should exist
 EXPECTED_GOLD_TABLES = [
-    "climate_energy_demand.gold.dim_date",
-    "climate_energy_demand.gold.dim_koppen_zones",
-    "climate_energy_demand.gold.dim_locations",
-    "climate_energy_demand.gold.dim_stations",
-    "climate_energy_demand.gold.fct_energy_demand_daily",
-    "climate_energy_demand.gold.fct_forest_resilience_annual",
-    "climate_energy_demand.gold.fct_ground_truth_verification_daily",
-    "climate_energy_demand.gold.fct_temp_change_annual",
-    "climate_energy_demand.gold.fct_land_cover_annual"
+    f"climate_energy_demand.{GOLD}.dim_date",
+    f"climate_energy_demand.{GOLD}.dim_koppen_zones",
+    f"climate_energy_demand.{GOLD}.dim_locations",
+    f"climate_energy_demand.{GOLD}.dim_stations",
+    f"climate_energy_demand.{GOLD}.fct_energy_demand_daily",
+    f"climate_energy_demand.{GOLD}.fct_forest_resilience_annual",
+    f"climate_energy_demand.{GOLD}.fct_ground_truth_verification_daily",
+    f"climate_energy_demand.{GOLD}.fct_temp_change_annual",
+    f"climate_energy_demand.{GOLD}.fct_land_cover_annual"
 ]
 
 # Key columns that should not be null for each table
 KEY_COLUMNS = {
-    "climate_energy_demand.gold.dim_date": ["date"],
-    "climate_energy_demand.gold.dim_koppen_zones": ["koppen_zone"],
-    "climate_energy_demand.gold.dim_locations": ["iso_code"],
-    "climate_energy_demand.gold.dim_stations": ["station_id"],
-    "climate_energy_demand.gold.fct_energy_demand_daily": ["iso_code", "date"],
-    "climate_energy_demand.gold.fct_forest_resilience_annual": ["iso_code", "year"],
-    "climate_energy_demand.gold.fct_ground_truth_verification_daily": ["station_id", "date"],
-    "climate_energy_demand.gold.fct_temp_change_annual": ["iso_code", "year", "months", "element"],
-    "climate_energy_demand.gold.fct_land_cover_annual": ["iso_code", "year", "land_cover_category", "element"]
+    f"climate_energy_demand.{GOLD}.dim_date": ["date"],
+    f"climate_energy_demand.{GOLD}.dim_koppen_zones": ["koppen_zone"],
+    f"climate_energy_demand.{GOLD}.dim_locations": ["iso_code"],
+    f"climate_energy_demand.{GOLD}.dim_stations": ["station_id"],
+    f"climate_energy_demand.{GOLD}.fct_energy_demand_daily": ["iso_code", "date"],
+    f"climate_energy_demand.{GOLD}.fct_forest_resilience_annual": ["iso_code", "year"],
+    f"climate_energy_demand.{GOLD}.fct_ground_truth_verification_daily": ["station_id", "date"],
+    f"climate_energy_demand.{GOLD}.fct_temp_change_annual": ["iso_code", "year", "months", "element"],
+    f"climate_energy_demand.{GOLD}.fct_land_cover_annual": ["iso_code", "year", "land_cover_category", "element"]
 }
 
 # Expected minimum row counts (adjust based on your data)
 MIN_ROW_COUNTS = {
-    "climate_energy_demand.gold.dim_date": 1000,
-    "climate_energy_demand.gold.dim_koppen_zones": 20,
-    "climate_energy_demand.gold.dim_locations": 100,
-    "climate_energy_demand.gold.dim_stations": 100,
-    "climate_energy_demand.gold.fct_energy_demand_daily": 1000,
-    "climate_energy_demand.gold.fct_forest_resilience_annual": 100,
-    "climate_energy_demand.gold.fct_ground_truth_verification_daily": 1000,
-    "climate_energy_demand.gold.fct_temp_change_annual": 100,
-    "climate_energy_demand.gold.fct_land_cover_annual": 100
+    f"climate_energy_demand.{GOLD}.dim_date": 1000,
+    f"climate_energy_demand.{GOLD}.dim_koppen_zones": 20,
+    f"climate_energy_demand.{GOLD}.dim_locations": 100,
+    f"climate_energy_demand.{GOLD}.dim_stations": 100,
+    f"climate_energy_demand.{GOLD}.fct_energy_demand_daily": 1000,
+    f"climate_energy_demand.{GOLD}.fct_forest_resilience_annual": 100,
+    f"climate_energy_demand.{GOLD}.fct_ground_truth_verification_daily": 1000,
+    f"climate_energy_demand.{GOLD}.fct_temp_change_annual": 100,
+    f"climate_energy_demand.{GOLD}.fct_land_cover_annual": 100
 }
 
 # =============================================================================
@@ -67,9 +78,10 @@ MIN_ROW_COUNTS = {
 class TestTableExistence:
     """Test that all gold tables exist and have data."""
     
+    @pytest.mark.skipif(LANE_SUFFIX == "_sdp", reason="notebook-lane audit infrastructure; the SDP lane uses pipeline checkpoints, not watermark tables")
     def test_audit_table_exists(self, spark):
         """Verify the gold audit table exists."""
-        audit_table = "climate_energy_demand.gold.ingestion_audit"
+        audit_table = f"climate_energy_demand.{GOLD}.ingestion_audit"
         assert spark.catalog.tableExists(audit_table), \
             f"Gold audit table {audit_table} does not exist"
     
@@ -166,7 +178,7 @@ class TestBusinessLogic:
     
     def test_energy_demand_sensitivity_index(self, spark):
         """Test demand_sensitivity_index is calculated and reasonable."""
-        table_name = "climate_energy_demand.gold.fct_energy_demand_daily"
+        table_name = f"climate_energy_demand.{GOLD}.fct_energy_demand_daily"
         
         if not spark.catalog.tableExists(table_name):
             pytest.skip(f"Table {table_name} does not exist")
@@ -187,7 +199,7 @@ class TestBusinessLogic:
     
     def test_temperature_anomaly_range(self, spark):
         """Test temp_anomaly values are in reasonable range."""
-        table_name = "climate_energy_demand.gold.fct_energy_demand_daily"
+        table_name = f"climate_energy_demand.{GOLD}.fct_energy_demand_daily"
         
         if not spark.catalog.tableExists(table_name):
             pytest.skip(f"Table {table_name} does not exist")
@@ -210,7 +222,7 @@ class TestBusinessLogic:
     
     def test_forest_carbon_density(self, spark):
         """Test carbon_density is calculated correctly."""
-        table_name = "climate_energy_demand.gold.fct_forest_resilience_annual"
+        table_name = f"climate_energy_demand.{GOLD}.fct_forest_resilience_annual"
         
         if not spark.catalog.tableExists(table_name):
             pytest.skip(f"Table {table_name} does not exist")
@@ -231,7 +243,7 @@ class TestBusinessLogic:
     
     def test_ground_truth_error_metrics(self, spark):
         """Test that error metrics are calculated correctly."""
-        table_name = "climate_energy_demand.gold.fct_ground_truth_verification_daily"
+        table_name = f"climate_energy_demand.{GOLD}.fct_ground_truth_verification_daily"
         
         if not spark.catalog.tableExists(table_name):
             pytest.skip(f"Table {table_name} does not exist")
@@ -271,7 +283,7 @@ class TestBusinessLogic:
 
     def test_temp_change_is_warming_flag(self, spark):
         """Test is_warming flag: True when element='Temperature change' and value > 0."""
-        table_name = "climate_energy_demand.gold.fct_temp_change_annual"
+        table_name = f"climate_energy_demand.{GOLD}.fct_temp_change_annual"
 
         if not spark.catalog.tableExists(table_name):
             pytest.skip(f"Table {table_name} does not exist")
@@ -294,7 +306,7 @@ class TestBusinessLogic:
 
     def test_land_cover_area_conversion(self, spark):
         """Test area_ha is non-negative (converted from 1000 ha to ha)."""
-        table_name = "climate_energy_demand.gold.fct_land_cover_annual"
+        table_name = f"climate_energy_demand.{GOLD}.fct_land_cover_annual"
 
         if not spark.catalog.tableExists(table_name):
             pytest.skip(f"Table {table_name} does not exist")
@@ -344,8 +356,8 @@ class TestDataQuality:
     def test_date_ranges_reasonable(self, spark):
         """Test that date columns are in reasonable ranges."""
         date_tables = [
-            "climate_energy_demand.gold.fct_energy_demand_daily",
-            "climate_energy_demand.gold.fct_ground_truth_verification_daily"
+            f"climate_energy_demand.{GOLD}.fct_energy_demand_daily",
+            f"climate_energy_demand.{GOLD}.fct_ground_truth_verification_daily"
         ]
         
         for table_name in date_tables:
@@ -369,9 +381,9 @@ class TestDataQuality:
     def test_year_ranges_reasonable(self, spark):
         """Test that year columns in annual tables are in reasonable ranges."""
         annual_tables = [
-            "climate_energy_demand.gold.fct_forest_resilience_annual",
-            "climate_energy_demand.gold.fct_temp_change_annual",
-            "climate_energy_demand.gold.fct_land_cover_annual"
+            f"climate_energy_demand.{GOLD}.fct_forest_resilience_annual",
+            f"climate_energy_demand.{GOLD}.fct_temp_change_annual",
+            f"climate_energy_demand.{GOLD}.fct_land_cover_annual"
         ]
 
         for table_name in annual_tables:
@@ -400,9 +412,9 @@ class TestReferentialIntegrity:
     
     def test_energy_demand_references_silver(self, spark):
         """Test that energy demand table data exists in silver sources."""
-        gold_table = "climate_energy_demand.gold.fct_energy_demand_daily"
-        silver_weather = "climate_energy_demand.silver.weather_historical"
-        silver_energy = "climate_energy_demand.silver.energy_metrics"
+        gold_table = f"climate_energy_demand.{GOLD}.fct_energy_demand_daily"
+        silver_weather = f"climate_energy_demand.{SILVER}.weather_historical"
+        silver_energy = f"climate_energy_demand.{SILVER}.energy_metrics"
         
         if not all(spark.catalog.tableExists(t) for t in [gold_table, silver_weather, silver_energy]):
             pytest.skip("Required tables don't exist")
@@ -426,8 +438,8 @@ class TestReferentialIntegrity:
 
     def test_temp_change_references_silver(self, spark):
         """Test that gold temp change country_names exist in silver temp change."""
-        gold_table = "climate_energy_demand.gold.fct_temp_change_annual"
-        silver_table = "climate_energy_demand.silver.temp_change_annual"
+        gold_table = f"climate_energy_demand.{GOLD}.fct_temp_change_annual"
+        silver_table = f"climate_energy_demand.{SILVER}.temp_change_annual"
 
         if not all(spark.catalog.tableExists(t) for t in [gold_table, silver_table]):
             pytest.skip("Required tables don't exist")
@@ -449,8 +461,8 @@ class TestReferentialIntegrity:
 
     def test_land_cover_references_silver(self, spark):
         """Test that gold land cover country_names exist in silver land cover."""
-        gold_table = "climate_energy_demand.gold.fct_land_cover_annual"
-        silver_table = "climate_energy_demand.silver.land_cover_annual"
+        gold_table = f"climate_energy_demand.{GOLD}.fct_land_cover_annual"
+        silver_table = f"climate_energy_demand.{SILVER}.land_cover_annual"
 
         if not all(spark.catalog.tableExists(t) for t in [gold_table, silver_table]):
             pytest.skip("Required tables don't exist")
@@ -480,7 +492,7 @@ class TestKoppenAndDynamicBaseTemps:
 
     def test_dim_koppen_zones_complete(self, spark):
         """Test that dim_koppen_zones has all expected climate zones."""
-        table_name = "climate_energy_demand.gold.dim_koppen_zones"
+        table_name = f"climate_energy_demand.{GOLD}.dim_koppen_zones"
         if not spark.catalog.tableExists(table_name):
             pytest.skip(f"Table {table_name} does not exist")
 
@@ -505,7 +517,7 @@ class TestKoppenAndDynamicBaseTemps:
 
     def test_dim_date_season_flags(self, spark):
         """Test heating_season and cooling_season flags in dim_date."""
-        table_name = "climate_energy_demand.gold.dim_date"
+        table_name = f"climate_energy_demand.{GOLD}.dim_date"
         if not spark.catalog.tableExists(table_name):
             pytest.skip(f"Table {table_name} does not exist")
 
@@ -523,7 +535,7 @@ class TestKoppenAndDynamicBaseTemps:
 
     def test_dim_locations_data_quality_flags(self, spark):
         """Test data_quality_flag values in dim_locations are valid."""
-        table_name = "climate_energy_demand.gold.dim_locations"
+        table_name = f"climate_energy_demand.{GOLD}.dim_locations"
         if not spark.catalog.tableExists(table_name):
             pytest.skip(f"Table {table_name} does not exist")
 
@@ -552,7 +564,7 @@ class TestKoppenAndDynamicBaseTemps:
 
     def test_dim_stations_data_quality_flags(self, spark):
         """Test data_quality_flag values in dim_stations are valid."""
-        table_name = "climate_energy_demand.gold.dim_stations"
+        table_name = f"climate_energy_demand.{GOLD}.dim_stations"
         if not spark.catalog.tableExists(table_name):
             pytest.skip(f"Table {table_name} does not exist")
 
@@ -576,7 +588,7 @@ class TestKoppenAndDynamicBaseTemps:
 
     def test_energy_demand_dynamic_hdd_cdd(self, spark):
         """Test that fct_energy_demand uses dynamic base temps and HDD/CDD are non-negative."""
-        table_name = "climate_energy_demand.gold.fct_energy_demand_daily"
+        table_name = f"climate_energy_demand.{GOLD}.fct_energy_demand_daily"
         if not spark.catalog.tableExists(table_name):
             pytest.skip(f"Table {table_name} does not exist")
 
@@ -624,8 +636,8 @@ class TestKoppenAndDynamicBaseTemps:
         ]
 
         for table_name in [
-            "climate_energy_demand.gold.dim_locations",
-            "climate_energy_demand.gold.dim_stations"
+            f"climate_energy_demand.{GOLD}.dim_locations",
+            f"climate_energy_demand.{GOLD}.dim_stations"
         ]:
             if not spark.catalog.tableExists(table_name):
                 continue
@@ -643,8 +655,8 @@ class TestKoppenAndDynamicBaseTemps:
 
     def test_dim_locations_koppen_zone_joins_to_reference(self, spark):
         """Test that koppen_zone in dim_locations exists in dim_koppen_zones."""
-        loc_table = "climate_energy_demand.gold.dim_locations"
-        ref_table = "climate_energy_demand.gold.dim_koppen_zones"
+        loc_table = f"climate_energy_demand.{GOLD}.dim_locations"
+        ref_table = f"climate_energy_demand.{GOLD}.dim_koppen_zones"
 
         if not all(spark.catalog.tableExists(t) for t in [loc_table, ref_table]):
             pytest.skip("Required tables don't exist")
@@ -681,7 +693,7 @@ class TestRealWorldSanity:
     def test_summer_temp_anomalies_during_heat_waves(self, spark):
         """Validate that summer (Jun-Jul-Aug) temp anomalies are positive
         during known EU heat wave years: 2019, 2021, 2022, 2023."""
-        table_name = "climate_energy_demand.gold.fct_temp_change_annual"
+        table_name = f"climate_energy_demand.{GOLD}.fct_temp_change_annual"
         if not spark.catalog.tableExists(table_name):
             pytest.skip(f"Table {table_name} does not exist")
         
@@ -707,7 +719,7 @@ class TestRealWorldSanity:
     
     def test_heatwave_events_during_known_periods(self, spark):
         """Validate that heat wave event flags are set during known EU heat wave periods."""
-        table_name = "climate_energy_demand.gold.fct_energy_demand_daily"
+        table_name = f"climate_energy_demand.{GOLD}.fct_energy_demand_daily"
         if not spark.catalog.tableExists(table_name):
             pytest.skip(f"Table {table_name} does not exist")
         
@@ -735,7 +747,7 @@ class TestRealWorldSanity:
     
     def test_ground_truth_model_accuracy_most_countries(self, spark):
         """Validate that model-observation agreement is good for most EU countries."""
-        table_name = "climate_energy_demand.gold.fct_ground_truth_verification_daily"
+        table_name = f"climate_energy_demand.{GOLD}.fct_ground_truth_verification_daily"
         if not spark.catalog.tableExists(table_name):
             pytest.skip(f"Table {table_name} does not exist")
         
@@ -760,7 +772,7 @@ class TestRealWorldSanity:
         Greece has only one NOAA station (LAMIA) located in an inland plain
         that is much hotter than the country-level modeled average. See ADR #8.
         This test documents the issue rather than failing."""
-        table_name = "climate_energy_demand.gold.fct_ground_truth_verification_daily"
+        table_name = f"climate_energy_demand.{GOLD}.fct_ground_truth_verification_daily"
         if not spark.catalog.tableExists(table_name):
             pytest.skip(f"Table {table_name} does not exist")
         
@@ -788,7 +800,7 @@ class TestRealWorldSanity:
     def test_latest_data_seasonal_patterns(self, spark):
         """Validate that the latest available data shows reasonable seasonal patterns.
         Summer months should be warmer than winter months for EU countries."""
-        table_name = "climate_energy_demand.gold.fct_energy_demand_daily"
+        table_name = f"climate_energy_demand.{GOLD}.fct_energy_demand_daily"
         if not spark.catalog.tableExists(table_name):
             pytest.skip(f"Table {table_name} does not exist")
         

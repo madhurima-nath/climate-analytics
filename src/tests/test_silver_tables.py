@@ -12,6 +12,16 @@ import os
 from src.common.audit_utils import get_last_watermark, AUDIT_TABLE
 from src.common.shared_logic import calculate_thermal_stress, relational_normalisation
 
+# Lane switch (migration exit criterion 3, quality parity): set the
+# TEST_LANE_SUFFIX environment variable to "_sdp" to run this suite against
+# the SDP lane schema (silver_sdp) instead of the notebook lane (silver).
+# Unset (default) keeps the original behaviour, so the DAB validation jobs
+# are unaffected. Notebook-lane infrastructure tests (audit/watermark tables)
+# are skipped in _sdp mode: SDP uses pipeline checkpoints, so the audit
+# table does not exist there.
+LANE_SUFFIX = os.environ.get("TEST_LANE_SUFFIX", "")
+SILVER = f"silver{LANE_SUFFIX}"
+
 # =============================================================================
 # FIXTURES
 # =============================================================================
@@ -24,44 +34,44 @@ from src.common.shared_logic import calculate_thermal_stress, relational_normali
 
 # All 10 silver tables that should exist
 EXPECTED_SILVER_TABLES = [
-    "climate_energy_demand.silver.energy_metrics",
-    "climate_energy_demand.silver.weather_observations",
-    "climate_energy_demand.silver.weather_projections",
-    "climate_energy_demand.silver.weather_historical",
-    "climate_energy_demand.silver.dim_stations",
-    "climate_energy_demand.silver.dim_date",
-    "climate_energy_demand.silver.dim_locations",
-    "climate_energy_demand.silver.forest_inventory_annual",
-    "climate_energy_demand.silver.land_cover_annual",
-    "climate_energy_demand.silver.temp_change_annual"
+    f"climate_energy_demand.{SILVER}.energy_metrics",
+    f"climate_energy_demand.{SILVER}.weather_observations",
+    f"climate_energy_demand.{SILVER}.weather_projections",
+    f"climate_energy_demand.{SILVER}.weather_historical",
+    f"climate_energy_demand.{SILVER}.dim_stations",
+    f"climate_energy_demand.{SILVER}.dim_date",
+    f"climate_energy_demand.{SILVER}.dim_locations",
+    f"climate_energy_demand.{SILVER}.forest_inventory_annual",
+    f"climate_energy_demand.{SILVER}.land_cover_annual",
+    f"climate_energy_demand.{SILVER}.temp_change_annual"
 ]
 
 # Key columns that should not be null for each table
 KEY_COLUMNS = {
-    "climate_energy_demand.silver.energy_metrics": ["country_name", "year"],
-    "climate_energy_demand.silver.weather_observations": ["country", "station_id", "date"],
-    "climate_energy_demand.silver.weather_projections": ["model", "country", "date", "h3_index"],
-    "climate_energy_demand.silver.weather_historical": ["country", "date"],
-    "climate_energy_demand.silver.dim_stations": ["station_id"],
-    "climate_energy_demand.silver.dim_date": ["date"],
-    "climate_energy_demand.silver.dim_locations": ["iso_code"],
-    "climate_energy_demand.silver.forest_inventory_annual": ["country_name", "land_use_category", "unit", "year"],
-    "climate_energy_demand.silver.land_cover_annual": ["country_name", "land_cover_category", "element", "unit", "year"],
-    "climate_energy_demand.silver.temp_change_annual": ["country_name", "months", "element", "unit", "year"]
+    f"climate_energy_demand.{SILVER}.energy_metrics": ["country_name", "year"],
+    f"climate_energy_demand.{SILVER}.weather_observations": ["country", "station_id", "date"],
+    f"climate_energy_demand.{SILVER}.weather_projections": ["model", "country", "date", "h3_index"],
+    f"climate_energy_demand.{SILVER}.weather_historical": ["country", "date"],
+    f"climate_energy_demand.{SILVER}.dim_stations": ["station_id"],
+    f"climate_energy_demand.{SILVER}.dim_date": ["date"],
+    f"climate_energy_demand.{SILVER}.dim_locations": ["iso_code"],
+    f"climate_energy_demand.{SILVER}.forest_inventory_annual": ["country_name", "land_use_category", "unit", "year"],
+    f"climate_energy_demand.{SILVER}.land_cover_annual": ["country_name", "land_cover_category", "element", "unit", "year"],
+    f"climate_energy_demand.{SILVER}.temp_change_annual": ["country_name", "months", "element", "unit", "year"]
 }
 
 # Expected minimum row counts (adjust based on your data)
 MIN_ROW_COUNTS = {
-    "climate_energy_demand.silver.energy_metrics": 100,
-    "climate_energy_demand.silver.weather_observations": 1000,
-    "climate_energy_demand.silver.weather_projections": 100,
-    "climate_energy_demand.silver.weather_historical": 1000,
-    "climate_energy_demand.silver.dim_stations": 10,
-    "climate_energy_demand.silver.dim_date": 365,
-    "climate_energy_demand.silver.dim_locations": 10,
-    "climate_energy_demand.silver.forest_inventory_annual": 10,
-    "climate_energy_demand.silver.land_cover_annual": 100,
-    "climate_energy_demand.silver.temp_change_annual": 100
+    f"climate_energy_demand.{SILVER}.energy_metrics": 100,
+    f"climate_energy_demand.{SILVER}.weather_observations": 1000,
+    f"climate_energy_demand.{SILVER}.weather_projections": 100,
+    f"climate_energy_demand.{SILVER}.weather_historical": 1000,
+    f"climate_energy_demand.{SILVER}.dim_stations": 10,
+    f"climate_energy_demand.{SILVER}.dim_date": 365,
+    f"climate_energy_demand.{SILVER}.dim_locations": 10,
+    f"climate_energy_demand.{SILVER}.forest_inventory_annual": 10,
+    f"climate_energy_demand.{SILVER}.land_cover_annual": 100,
+    f"climate_energy_demand.{SILVER}.temp_change_annual": 100
 }
 
 # =============================================================================
@@ -71,6 +81,7 @@ MIN_ROW_COUNTS = {
 class TestTableExistence:
     """Test that all silver tables exist and have data."""
     
+    @pytest.mark.skipif(LANE_SUFFIX == "_sdp", reason="notebook-lane audit infrastructure; the SDP lane uses pipeline checkpoints, not watermark tables")
     def test_audit_table_exists(self, spark):
         """Verify the audit table exists."""
         assert spark.catalog.tableExists(AUDIT_TABLE), \
@@ -160,7 +171,7 @@ class TestUnitConversions:
     
     def test_temperature_conversion_weather_observations(self, spark):
         """Test temperature is in Celsius (reasonable range)."""
-        table_name = "climate_energy_demand.silver.weather_observations"
+        table_name = f"climate_energy_demand.{SILVER}.weather_observations"
         
         if not spark.catalog.tableExists(table_name):
             pytest.skip(f"Table {table_name} does not exist")
@@ -232,6 +243,7 @@ class TestMergeAndDedup:
         assert total_rows == distinct_keys, \
             f"Table {table_name} has {total_rows} rows but only {distinct_keys} distinct key combinations. Duplicates detected!"
     
+    @pytest.mark.skipif(LANE_SUFFIX == "_sdp", reason="notebook-lane audit infrastructure; the SDP lane uses pipeline checkpoints, not watermark tables")
     def test_audit_log_updated(self, spark):
         """Test that audit log is being updated for tables."""
         audit_df = spark.table(AUDIT_TABLE)
@@ -257,7 +269,7 @@ class TestDataQuality:
     
     def test_energy_metrics_year_range(self, spark):
         """Test that energy metrics are within expected year range."""
-        table_name = "climate_energy_demand.silver.energy_metrics"
+        table_name = f"climate_energy_demand.{SILVER}.energy_metrics"
         
         if not spark.catalog.tableExists(table_name):
             pytest.skip(f"Table {table_name} does not exist")
@@ -282,7 +294,7 @@ class TestDataQuality:
     
     def test_weather_date_range(self, spark):
         """Test that weather observations have reasonable date ranges."""
-        table_name = "climate_energy_demand.silver.weather_observations"
+        table_name = f"climate_energy_demand.{SILVER}.weather_observations"
         
         if not spark.catalog.tableExists(table_name):
             pytest.skip(f"Table {table_name} does not exist")
@@ -307,7 +319,7 @@ class TestDataQuality:
     
     def test_dim_date_completeness(self, spark):
         """Test that date dimension has no gaps."""
-        table_name = "climate_energy_demand.silver.dim_date"
+        table_name = f"climate_energy_demand.{SILVER}.dim_date"
         
         if not spark.catalog.tableExists(table_name):
             pytest.skip(f"Table {table_name} does not exist")

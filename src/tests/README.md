@@ -277,6 +277,27 @@ pytest.main([
 ])
 ```
 
+### Option 5: Against the SDP Lane (`_sdp` schemas)
+
+The silver and gold suites validate whichever lane the `TEST_LANE_SUFFIX` environment variable selects. This is the quality-parity check for the SDP migration (exit criterion 3):
+
+```python
+import os, sys
+project_root = "/Workspace/Users/<your-email>/climate-analytics"
+os.environ["TEST_LANE_SUFFIX"] = "_sdp"      # silver_sdp / gold_sdp instead of silver / gold
+os.environ["PYTHONDONTWRITEBYTECODE"] = "1"  # serverless: no __pycache__ writes on Workspace paths
+sys.path.insert(0, project_root)
+import pytest
+pytest.main([f"{project_root}/src/tests/test_silver_tables.py", "-q", "--tb=short"])
+pytest.main([f"{project_root}/src/tests/test_gold_tables.py", "-q", "--tb=short"])
+```
+
+Notes:
+- Unset (default), the suites validate the notebook lane (`silver`/`gold`), so the DAB validation jobs are unaffected.
+- In `_sdp` mode the gold suite's referential-integrity checks read `silver_sdp`, matching the SDP lane's dependency graph.
+- The audit/watermark tests are skipped in `_sdp` mode: they validate notebook-lane infrastructure (`ingestion_audit`), which SDP replaces with pipeline checkpoints.
+- Evidence: 4 November 2026 run: silver 59 passed / 2 skipped (audit), gold 69 passed / 1 skipped (audit), 0 failures. Logged in the Validation Record of [Pipeline Approaches](../../../pipeline_approaches.md).
+
 ## Sample Test Output
 
 Below is a sample output from a successful test run showing all validations passing:

@@ -8,13 +8,13 @@ The Bronze layer is architected as a **Raw Mirror** of the source systems to ens
 *   **1-to-1 Mapping:** Every source file or API response is stored in a corresponding Delta table to preserve data lineage.
 *   **Immutability:** Data is persisted in its native format. No cleaning, filtering, or unit conversions are performed here. All raw "quirks" (e.g., Fahrenheit units, non-standard headers, and API-specific flags) are preserved.
 *   **Lineage Enrichment:** Every record is enriched with `ingested_at` (timestamp) and `source_file` (metadata path/URL) to ensure 100% traceability.
-*   **Location-Driven Scaling:** Ingestion is driven by `reference_locations.csv`: adding a territory means adding a row, not code, which is how the pipeline scales from a few regions to 250+ global territories.
+*   **Location-Driven Scaling:** Ingestion is driven by `reference_locations.csv`: adding a territory means adding a row, not code, which is how the pipeline scales from a few regions to 200+ locations.
 
 
 ## 2. Infrastructure Constraints & Resiliency
 The pipelines are specifically optimised for the Databricks Free Edition environment.
 ### Unity Catalog (UC) Volumes: Egress Management
-Due to network egress restrictions in the Databricks Free Edition, several datasets (OWID, FAOSTAT, GFW, NOAA) are ingested via a **Manual-to-Volume** pattern. 
+Due to network egress restrictions in the Databricks Free Edition, several datasets (OWID, FAOSTAT, GFW) are ingested via a **Manual-to-Volume** pattern. The Open-Meteo APIs and the NOAA NCEI servers are reachable from Free Edition compute, so those sources are fetched directly. 
 1.  Data is downloaded locally.
 2.  Uploaded to `/Volumes/climate_energy_demand/bronze/raw_uploads/`.
 3.  Ingested into Delta tables via Spark to ensure they are governed by Unity Catalog.
@@ -27,10 +27,10 @@ To mitigate the 10-minute execution timeout enforced by the Databricks Free Edit
 
 | Notebook | Dataset | Provider | Temporal Grain | Technical Method
 | :--- | :--- | :--- | :--- | :--- |
-| **01_ingest_openmeteo_historical** | Historical Weather | Open-Meteo Archive | Daily (2010–Present) | API Backfill with replaceWhere |
+| **01_ingest_openmeteo_historical** | Historical Weather | Open-Meteo Archive | Daily (2010-Present) | API Backfill with replaceWhere |
 | **01_ingest_openmeteo_incremental** | Incremental Weather | Open-Meteo Forecast | Daily (Recent Updates) | Delta Merge with 7-day look-back |
 | **02_ingest_owid_energy** | Energy Consumption | Our World in Data (OWID) | Annual (Global) | Volume-to-Delta Overwrite |
-| **03_ingest_noaa_gsod** | Ground-Truth Observations | NOAA GSOD | Daily (Station-level) | Haversine Spatial Discovery |
+| **03_ingest_noaa_gsod** | Ground-Truth Observations | NOAA GSOD | Daily (Station-level, 2023 to Aug 2025) | Direct HTTPS fetch from NOAA NCEI, Haversine station discovery. NOAA discontinued GSOD on 29 August 2025; this is a one-time backfill |
 | **04_ingest_openmeteo_cmip6_projections** | Climate Projections | Open-Meteo CMIP6 | Daily (Sampled) | Multi-model Ensemble (7 Models) |
 | **05_ingest_fao_data** | Forestry, Land Cover, Temperature Change | FAOSTAT (UN) | Annual, per file | Bulk Volume Ingestion |
 
@@ -38,12 +38,12 @@ To mitigate the 10-minute execution timeout enforced by the Databricks Free Edit
 ## 4. Engineering Decisions & Resilience
 
 ### A. Fault-Tolerant Checkpointing
-Ingestion notebooks for weather and stations utilize an **Append-on-Success** pattern. 
-* Granular Tracking: State is tracked at the (Country, Year) grain, which identifies completed countries and years already present in the Delta table. The pipeline performs a pre-flight metadata scan of the Delta table to generate a work-queue of missing tasks. It automatically filters the ingestion queue to skip completed work.
+Ingestion notebooks for weather and stations use an **Append-on-Success** pattern.
+* Granular Tracking: State is tracked per country: completed countries (GSOD, via the distinct country list in the target table) and the latest ingested date per country (Open-Meteo incremental, via a per-country watermark). The pipeline performs a pre-flight metadata scan of the Delta table to generate a work-queue of missing tasks. It automatically filters the ingestion queue to skip completed work.
 * Idempotency: This ensures that in the event of a network failure or daily API limit, the pipeline can be resumed immediately without data loss or redundant processing.
 
 ### B. API Resilience (Throttling & Backoff)
-To handle the high volume of requests for 250+ locations, the Open-Meteo notebooks implement a **Fault-Tolerant Retry Logic**. This includes exponential backoff for 429 (Too Many Requests) errors and a 2.0s throttling delay to ensure stability during high-volume global backfills.
+To handle the volume of API requests across 200+ locations, the Open-Meteo notebooks implement a **Fault-Tolerant Retry Logic**. This includes exponential backoff for 429 (Too Many Requests) errors and a 2.0s throttling delay to ensure stability during high-volume global backfills.
 *   **Exponential Backoff:** If an API returns a `429 (Too Many Requests)` error, the script enters a cooldown period before retrying.
 *   **Throttling:** 
     *   **Backfills:** 2.0s delay per request to accommodate large data payloads (15 years of daily stats).

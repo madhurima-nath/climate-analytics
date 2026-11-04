@@ -72,7 +72,7 @@ Validate the reliability of "Virtual" weather data (Open-Meteo Reanalysis) again
 3.  **Data Quality Filtering:** Exclusion of days where physical sensors report NULL or "Missing" flags to prevent skewing the accuracy score.
 
 ### 4. Key Business Metrics
-*   **Model Confidence Score:** A 0–100% index derived from the inverse of the RMSE.
+*   **Model Confidence Score:** A 0-100% index derived from the inverse of the RMSE.
 *   **Regional Bias Identification:** Geospatial mapping of stations with a consistent `bias_error > 2.0°C`.
 
 ---

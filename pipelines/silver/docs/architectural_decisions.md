@@ -266,7 +266,7 @@ Extended Range: By extending the calendar to 2040, you ensure the Gold layer can
 
 
 
-`pipelines/silver/configs/dim_stations.yml` configuration extracts and standardises the metadata for the NOAA weather stations. It is a critical "bridge" table that ensures every weather station is correctly mapped to a specific Country, allowing for seamless joining between station-level ground truths and national-level energy data.
+`pipelines/silver/configs/dim_stations.yml` configuration extracts and standardises the metadata for the NOAA weather stations. It maps every weather station to its country, so station-level ground truth can be joined with country-level modelled weather and energy data.
 
 Key Engineering Decisions in this file:
 Deduplication at the Source:
@@ -364,7 +364,7 @@ Summary of what this achieves:
 ## 10: GSOD Dual-Affiliation Station Country Resolution
 *   **Context:** The lane content parity check (23 October 2026) found 3 of 221 stations with different `country` values between the notebook and SDP lanes: GSOD lists each of them under two country names (Guadeloupe/Montserrat, Gaza Strip/Israel, Heard Island and McDonald Islands/French Southern Territories) for the same dates, with identical `ingested_at` timestamps from the single bulk load. "Latest per station" (the `row_number` window in the notebook lane, the `apply_changes` sequence in the SDP lane) hits a perfect tie and each lane breaks it arbitrarily.
 *   **Decision:** Resolve dual-affiliation stations to their current affiliation via an explicit `STATION_COUNTRY_OVERRIDES` map applied inside `create_dim_stations` (`src/transforms/weather.py`), after the latest-row selection, so both dedup paths and the SDP lane produce the same deterministic value.
-*   **Consequence:** The SDP lane already held the current affiliations (correct by coincidence, not by rule); the notebook lane's 3 rows and the 1,385 downstream `fct_ground_truth_verification_daily` rows derived from them are repaired by re-running the silver and gold orchestrators.
+*   **Consequence:** The SDP lane already held the current affiliations (correct by coincidence, not by rule); the notebook lane's 3 rows were repaired by resetting the dim_stations watermark and re-running the silver orchestrator. The dual affiliation also made `process_fidelity_audit`'s station-date deduplication nondeterministic (`weather_observations` holds two rows per dual-affiliation station and date, differing only in country, so `dropDuplicates` kept an arbitrary variant); `process_fidelity_audit` (`src/transforms/quality.py`) now resolves the observation country through `dim_stations` before deduplicating, so the ground-truth table attributes those stations to their current country deterministically in both lanes.
 *   **Validation:** `test_lane_parity.py` compares `dim_stations` and all other table pairs across lanes (see [Pipeline Approaches](../../../pipeline_approaches.md), Validation Record).
 *   **Alternative:** A data-driven tie-break (latest observation date) or alphabetical ordering. *Rejected:* the country variants share identical date ranges, and alphabetical ordering picks "Heard Island and McDonald Islands" for a Kerguelen station.
 *   **Standard Practice:** Yes. Explicit override maps for known source-data quirks are a standard dimension-hygiene pattern.

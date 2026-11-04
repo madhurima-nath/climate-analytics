@@ -557,9 +557,9 @@ Each widget filters by layer using widget-scoped predicates (no page-level filte
 
 | Widget Name | Type | Dataset | Description |
 | --- | --- | --- | --- |
-| bronze_header | text | — | Bronze layer header label |
-| silver_header | text | — | Silver layer header label |
-| gold_header | text | — | Gold layer header label |
+| bronze_header | text | none | Bronze layer header label |
+| silver_header | text | none | Silver layer header label |
+| gold_header | text | none | Gold layer header label |
 | bronze_count | counter | ds_table_kpis | Bronze table count |
 | silver_count | counter | ds_table_kpis | Silver table count |
 | gold_count | counter | ds_table_kpis | Gold table count |

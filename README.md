@@ -2,7 +2,7 @@
 
 ## Overview
 
-This repository contains a modular climate data pipeline built on Databricks Free Edition. It ingests raw climate, energy, and environmental data from multiple public sources, standardises it, and transforms it into analysis-ready fact tables stored in the `climate_energy_demand` Unity Catalog. The pipeline covers 250+ global territories, driven by a reference locations file in a Unity Catalog Volume.
+This repository contains a modular climate data pipeline built on Databricks Free Edition. It ingests raw climate, energy, and environmental data from multiple public sources, standardises it, and transforms it into analysis-ready fact tables stored in the `climate_energy_demand` Unity Catalog. The pipeline covers 200+ locations, listed in a reference locations file in a Unity Catalog Volume.
 
 The project targets **Physical Climate Risk (PCR)** analysis: combining weather observations, climate projections, energy demand, and land-use indicators into tables ready for AI/BI Dashboards and Genie natural language queries.
 
@@ -14,7 +14,7 @@ New to the project? Start with [How the Pipeline Works](#how-the-pipeline-works)
 
 Data moves through three layers in the `climate_energy_demand` catalog, each with one responsibility and its own validation job:
 
-1. **Bronze, raw mirror.** Every source lands in its own Delta table exactly as delivered. Nothing is cleaned or converted here, deliberately: Fahrenheit readings, non-standard headers, and source-specific missing-value flags are all preserved, and every row is tagged with `ingested_at` and `source_file`. Because the raw data is untouched, any later correction can be replayed from the originals. Open-Meteo data is pulled via API, driven by `reference_locations.csv` (250+ territories); OWID, NOAA, and FAOSTAT files are uploaded manually to the `raw_uploads` Unity Catalog Volume and then ingested into governed Delta tables, because Free Edition network restrictions prevent direct downloads. Source-by-source design: [Bronze README](pipelines/bronze/README.md).
+1. **Bronze, raw mirror.** Every source lands in its own Delta table exactly as delivered. Nothing is cleaned or converted here, deliberately: Fahrenheit readings, non-standard headers, and source-specific missing-value flags are all preserved, and every row is tagged with `ingested_at` and `source_file`. Because the raw data is untouched, any later correction can be replayed from the originals. Open-Meteo data is pulled via API for every location in `reference_locations.csv`; OWID and FAOSTAT files are uploaded manually to the `raw_uploads` Unity Catalog Volume and then ingested into governed Delta tables, because Free Edition blocks outbound requests to their hosts; NOAA station data is fetched directly from the public NOAA servers over HTTPS. Source-by-source design: [Bronze README](pipelines/bronze/README.md).
 
 2. **Silver, the standardisation gate.** The `silver_orchestrator` notebook processes one YAML config per table (`pipelines/silver/configs/*.yml`). For each config it reads the last watermark from `silver.ingestion_audit`, extracts only new Bronze rows past that watermark, calls the table's transform function in `src/transforms/` (units to metric, wide FAO/OWID tables pivoted to one row per year per metric, shared dimensions built once for every pipeline), MERGEs the result into the target on the config's merge keys, and writes the new watermark back to the audit table. Each config runs inside its own error handling, so one failing table is logged and skipped while the rest complete. Adding a Silver table means adding a YAML file: the orchestrator discovers it automatically. Deep detail: [Silver README](pipelines/silver/README.md), [silver design doc](pipelines/silver/docs/design_doc.md), and the [architecture decision records](pipelines/silver/docs/architectural_decisions.md).
 
@@ -48,11 +48,11 @@ The pipeline draws on four public data providers across five ingestion streams, 
 
 | Source | What it provides | Why it's here |
 | --- | --- | --- |
-| **Open-Meteo** (Historical + Incremental) | Hourly weather observations (temperature, precipitation, wind, humidity) for any lat/lon | Foundation for current-condition analysis and the join key for energy demand modelling |
-| **NOAA GSOD** | Daily weather station observations with multi-decade history | Provides station-level ground-truth weather with long temporal coverage for trend analysis |
-| **OWID Energy** | Country-level energy consumption, production, and emissions metrics | Links climate variables to human energy demand and decarbonisation tracking |
-| **FAOSTAT** | Land cover, forest inventory, and temperature change indicators by country | Connects climate trends to land-use and ecological resilience outcomes |
-| **Open-Meteo CMIP6** | Climate model projections under SSP scenarios | Enables forward-looking risk analysis beyond historical observations |
+| **Open-Meteo** (Historical + Incremental) | Daily temperature data (max, min, mean) for 200+ locations, 2010 to present | Foundation for current-condition analysis and the weather side of the daily energy-demand join |
+| **NOAA GSOD** | Daily weather station observations (221 stations, 2023 to August 2025) | Independent ground truth: validates the Open-Meteo model per station in `fct_ground_truth_verification_daily` |
+| **OWID Energy** | National electricity demand and generation, population, and GDP (220 countries, annual 2010-2025) | The energy side of the daily energy-demand join in `fct_energy_demand_daily` |
+| **FAOSTAT** | Land cover (189 countries, 2010-2024), forest inventory (2010-2025), and temperature change (186 countries, 2010-2025) | Connects climate trends to land-use and ecological resilience outcomes |
+| **Open-Meteo CMIP6** | Daily climate projections from 7 models (200+ locations, 2020-2040) | Extends the temperature analysis from measured history to projected futures |
 
 Together these sources span weather observations, climate projections, energy demand, and land/forest indicators: the four pillars of a Physical Climate Risk analytics layer.
 
@@ -62,11 +62,11 @@ The Gold layer distils standardised Silver data into analysis-ready fact and dim
 
 | Gold table | Analytical use case |
 | --- | --- |
-| `fct_energy_demand_daily` | Joins energy consumption with weather observations to analyse how temperature extremes drive heating and cooling demand; identify energy-vulnerable periods and regions |
-| `fct_temp_change_annual` | Annual temperature-change indicators by country; supports multi-decade warming trend visualisation and anomaly tracking against historical baselines |
-| `fct_land_cover_annual` | Year-over-year land cover transitions; enables deforestation detection, urbanisation tracking, and land-use change analysis |
-| `fct_forest_resilience_annual` | Combines forest inventory with temperature signals; scores forest ecosystem resilience under climate stress to identify vulnerable areas |
-| `fct_ground_truth_verification_daily` | Compares modelled Open-Meteo weather against NOAA station observations to quantify model reliability per country and station |
+| `fct_energy_demand_daily` | Joins national electricity consumption with daily weather data (180 countries; one row per country per day, 2010-2025) to analyse how temperature extremes drive heating and cooling demand; identify energy-vulnerable periods and regions |
+| `fct_temp_change_annual` | Annual temperature-change indicators by country (186 countries, 2010-2025); supports warming trend and anomaly tracking against baselines |
+| `fct_land_cover_annual` | Annual land cover area by category (189 countries, 2010-2024); enables deforestation and urbanisation tracking by comparing years |
+| `fct_forest_resilience_annual` | Combines forest inventory with temperature signals to score forest resilience under climate stress (179 countries, 2010-2025) |
+| `fct_ground_truth_verification_daily` | Compares modelled Open-Meteo weather against NOAA station observations (221 stations, 2023 to August 2025) to quantify model reliability per country and station |
 | `dim_stations`, `dim_locations`, `dim_date`, `dim_koppen_zones` | Shared dimensions enabling cross-fact-table drill-downs by station, geography, time period, and Köppen climate zone (the standard climate classification system, used here to group regions by climate type for comparative analysis) |
 
 ## Why the Architecture Is This Way

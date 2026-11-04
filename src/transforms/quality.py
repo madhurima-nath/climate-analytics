@@ -24,11 +24,22 @@ def process_fidelity_audit(sources: dict, params: dict) -> DataFrame:
     modeled_df = sources["modeled_data"]               # Open-Meteo
     station_dim = sources["station_dim"]
 
-    # 1. Select and rename observed temperature from physical stations
+    # 1. Select and rename observed temperature from physical stations.
+    #    Country is resolved through dim_stations: GSOD lists a few stations
+    #    under two country names (ADR #10), so weather_observations holds two
+    #    rows per (station_id, date) differing only in country. Resolving the
+    #    country first makes the variants identical rows, so the
+    #    dropDuplicates below is deterministic in both lanes.
     observed_clean = physical_df.select(
         "country", "station_id", "date",
         F.col("temp_mean_c").alias("observed_avg_temp")
-    ).dropDuplicates(["station_id", "date"])
+    ).join(
+        station_dim.select("station_id", F.col("country").alias("station_country")),
+        on="station_id",
+        how="left"
+    ).withColumn(
+        "country", F.coalesce("station_country", "country")
+    ).drop("station_country").dropDuplicates(["station_id", "date"])
 
     # 2. Cast modeled date from string to date and rename temperature column
     modeled_clean = modeled_df.withColumn(

@@ -217,8 +217,14 @@ resources:
         # glob is the unified library field; it cannot be mixed with file/notebook entries.
         - glob:
             include: ./pipelines/silver/silver_sdp.py
+        # DLR feature (dlr_design.md): mock micro-climate vectors, trust constants, stress scenarios
+        - glob:
+            include: ./pipelines/silver/dlr_microclimate_sdp.py
         - glob:
             include: ./pipelines/gold/gold_sdp.py
+        # DLR feature gold facts (dlr_design.md 5.4-5.5): daily operational efficiency + annual stress horizon
+        - glob:
+            include: ./pipelines/gold/dlr_gold_sdp.py
         - glob:
             include: ./src/transforms/**
         - glob:
@@ -238,6 +244,13 @@ resources:
     climate_monitoring:
       display_name: "Climate Analysis Dashboard"
       file_path: "./dashboard/Climate Analysis Dashboard.lvdash.json"
+      warehouse_id: "${var.warehouse_id}"
+
+    # DLR Climate Stress-Test Showcase: gold DLR facts (dlr_design.md sections 5.4-5.5).
+    # Same Git-tracked file pattern as climate_monitoring above.
+    dlr_stress_test:
+      display_name: "DLR Climate Stress-Test Showcase"
+      file_path: "./dashboard/DLR Climate Stress-Test Showcase.lvdash.json"
       warehouse_id: "${var.warehouse_id}"
 
 targets:

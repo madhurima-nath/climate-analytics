@@ -196,6 +196,7 @@ What happens to the rest of 2025 and 2026: they are real rows in the daily fact,
 * OWID generation stops at 2025 (partial); Exposure is held flat thereafter.
 * FAOSTAT resilience is hold-last-known for future years.
 * **Rolling-baseline warm start:** the 10-year rolling monthly baseline contains almost only 2010 data when evaluating 2011, inflating early anomalies (Germany 2011: Z = 2.41°C, 70 heatwave days). This is inherent to the custom anomaly rule — it affects heatwave flags equally, not only the resilience score — and is documented rather than patched. Early-window heatwave flags may therefore diverge from the OWID-parity reference in 2011.
+* **Wildfire overlay scope (documented boundary):** the overlay flags days where an **acute anomalous heat event coincides with a chronically degraded forest** (score < 0.4). It is an anomaly-driven forest-fragility proxy for grid-corridor risk — **not a wildfire-ignition or fire-causation model**. Real fire-danger systems (FWI / EFFIS) additionally use drought, precipitation, humidity, fuel moisture, ignition sources and wind-driven spread; none of these exist in the lakehouse. The dependency is strictly one-way: `heatwave_flag` is computed purely from weather (rolling-baseline anomaly on the daily mean) and never touches forest data; only the overlay combines the two. Singapore's zero critical days reflect absence of anomalous heat plus a stable forest baseline — not an absence of hot weather.
 * The October–December 2026 tail fills in as the watermark advances.
 
 ## 11. Implementation sequence

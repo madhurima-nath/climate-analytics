@@ -4,7 +4,7 @@ This document describes the two supported approaches for processing the Silver a
 
 The Bronze layer (API-based ingestion) is **not** converted to SDP and remains notebook-based in both approaches. SDP consumes the Bronze Delta tables as read-only sources.
 
-> **Position.** This is not an open-ended choice between two equivalent options. Notebook Orchestration (A) is the **production baseline** and remains authoritative for `silver`/`gold` until the migration completes. SDP (B) is the **strategic direction**, running in an isolated parallel lane (`silver_sdp`/`gold_sdp`) until the exit criteria in [Coexistence Strategy](#coexistence-strategy) are met. The SDP lane is deployed, its first full update completed on 21 October 2026, and output parity against the baseline is fully validated (row counts and content, all 19 table pairs; evidence in [Exit Criteria](#exit-criteria-when-coexistence-ends)). Quality parity (criterion 3) is validated as of 4 November 2026; criteria 2, 4 and 5 remain open.
+> **Position.** This is not an open-ended choice between two equivalent options. Notebook Orchestration (A) is the **production baseline** and remains authoritative for `silver`/`gold` until the migration completes. SDP (B) is the **strategic direction**, running in an isolated parallel lane (`silver_sdp`/`gold_sdp`) until the exit criteria in [Coexistence Strategy](#coexistence-strategy) are met. The SDP lane is deployed, its first full update completed on 21 October 2026, and output parity against the baseline is fully validated (row counts and content, all 19 table pairs; evidence in [Exit Criteria](#exit-criteria-when-coexistence-ends)). Quality parity (criterion 3) is validated as of 4 November 2026; criteria 2, 4 and 5 remain open. The DLR climate stress-test feature is a separate workload, covered in [The DLR Feature Pipeline (SDP-Native)](#the-dlr-feature-pipeline-sdp-native): it has no notebook counterpart and sits outside these exit criteria.
 
 ## Why the SDP Lane Exists
 
@@ -212,6 +212,42 @@ Sharing the batch-written transforms with a declarative pipeline required three 
 
 ---
 
+## The DLR Feature Pipeline (SDP-Native)
+
+The DLR climate stress-test feature was born in the declarative lane. It has no notebook counterpart, it is not part of the notebook-to-SDP migration, and it sits outside the 19-table parity exit criteria: there is nothing in the notebook lane to migrate. It exists as two additional source files inside the same `silver_gold_sdp` pipeline. This section covers how the feature is wired into the pipeline; the physics, parameter values and dataset logic are documented in [dlr_design.md](dlr_design.md).
+
+### What the feature adds
+
+Six new datasets across two source files:
+
+| Dataset | Type | Source file | Rows | What it holds |
+| --- | --- | --- | --- | --- |
+| `silver_sdp.micro_climate_synthetic_vectors` | MV | `pipelines/silver/dlr_microclimate_sdp.py` | 33,969 (3 countries, 2010-2040) | Simulated wind speed, solar radiation and congestion penalty, one row per country per day |
+| `silver_sdp.weather_historical_anomaly_daily` | MV | `pipelines/silver/dlr_microclimate_sdp.py` | 18,321 | Real temperature history with a rolling 10-year monthly baseline and anomaly |
+| `silver_sdp.dim_country_historical_trust_metadata` | MV | `pipelines/silver/dlr_microclimate_sdp.py` | 3 | Per-country base line ratings and NOAA trust constants, computed from `gold_sdp.fct_ground_truth_verification_daily` (2023-01-01 to 2025-08-24; never hardcoded) |
+| `silver_sdp.climate_stress_scenarios_daily` | MV | `pipelines/silver/dlr_microclimate_sdp.py` | 3 scenarios × 3 countries × 14 years (2027-2040) | Real recycled historical days warmed by +2°C and +4°C for the projection horizon |
+| `gold_sdp.fct_dlr_operational_efficiency_daily` | MV | `pipelines/gold/dlr_gold_sdp.py` | 18,321 | Daily dynamic vs static line ratings, unlocked capacity in MW, avoided congestion costs and the wildfire overlay |
+| `gold_sdp.fct_dlr_climate_stress_horizon_annual` | MV | `pipelines/gold/dlr_gold_sdp.py` | 126 | Projected heat-throttling days and the UN climate risk score per scenario-year |
+
+### Why everything is a materialized view
+
+The feature never touches Bronze: every input is an already-clean silver or gold table, read in batch. Streaming tables and APPLY CHANGES exist for incremental upserts from Bronze, and none of that applies here. Materialized views provide the two things the feature actually needs: automatic refresh when upstream datasets change, and automatic dependency ordering, where each gold fact waits for the silver views it reads with no job chaining. The lane-wide rule from [Approach B](#approach-b-lakeflow-spark-declarative-pipelines-sdp) applies here too: a dataset's type cannot be changed in place (`CANNOT_CHANGE_DATASET_TYPE`); the old artifact must be dropped first.
+
+### SDP capabilities the feature uses
+
+* **Inline data quality:** a warn-mode expectation asserts heatwave parity. The daily fact recomputes the heatwave rule independently, and the expectation checks it against `gold_sdp.fct_energy_demand_daily` over their shared 2010-2025 window (0 violations). In the notebook lane this would be a separate pytest run; here it is part of the load step and visible in the event log.
+* **Automatic dependency resolution:** the gold facts read silver views and other gold facts; SDP builds them in the right order without task chaining.
+* **One event log:** progress, expectation metrics and errors for the feature land in the same `event_log()` as the rest of the pipeline, so the migration lane and the DLR feature are monitored identically.
+* **Deterministic synthetic data:** the pseudo-noise in the vectors derives from a hash of (country, date, channel), never `rand()`. Refreshes are idempotent: the same Bronze snapshot always produces the same rows, which is what makes cross-run checks meaningful.
+
+### Deployment and verification
+
+Both source files are declared alongside `silver_sdp.py` and `gold_sdp.py` in the single `silver_gold_sdp` pipeline resource in `databricks.yml`, under the same Free Edition one-active-pipeline constraint. The feature deploys with the same bundle command and refreshes with the same update; there is no separate job to schedule.
+
+Post-refresh checks (the full list with expected values is section 9 of [dlr_design.md](dlr_design.md)): 33,969 vector rows with wind inside 0.6-8.0 m/s and penalties at or above €40; 18,321 unique country-days in the daily fact with dynamic ratings inside the 600-1,400 A clamp and exactly equal to static whenever the forecast is untrusted; 126 horizon rows, with the Extreme +4°C scenario crossing the choke threshold 8 times in Germany, 11 in Singapore and 5 in Belgium.
+
+---
+
 ## Comparison Summary
 
 | Dimension | Notebook Orchestration (A) | Declarative Pipelines / SDP (B) |
@@ -339,4 +375,5 @@ One-off checks are logged here with method and result, so that nothing runs undo
 | Built-in data quality expectations | Approach B (SDP) |
 | Automatic cross-layer dependency resolution | Approach B (SDP) |
 | Built-in lineage and event logging | Approach B (SDP) |
+| DLR climate stress-test feature | Approach B only (SDP-native, no notebook lane) |
 | Both running simultaneously for comparison | Both (coexistence mode) |

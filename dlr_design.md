@@ -1,16 +1,18 @@
-# DLR Climate Stress-Test Feature: Design Document
+# DLR Climate Stress-Test Feature: Methodology
 
-**Status:** design complete and locked, 5 November 2026. Updated 10 November 2026: rating-temperature basis (daily maximum) and the forest wildfire resilience score (section 4.3) recorded. Implementation: Step 1 (four silver datasets) built and validated; Step 2 (two gold facts) in progress.
-**Position:** SDP-native scope. This feature is born entirely in the SDP lane (the `silver_gold_sdp` pipeline). It is not implemented in the notebook lane and sits outside the dual-approach parity exit criteria, which cover the original 19 datasets. See `pipeline_approaches.md` for the lane architecture.
+The locked physics, parameters, dataset logic and validation for the DLR feature.
 
-## 1. Purpose
+**Status:** methodology appendix. Design complete and locked, 5 November 2026; rating-temperature basis and the forest wildfire resilience score updated 10 November 2026. Implementation is complete and validated; the wiring (source files, pipeline resource, deployment) lives in [pipeline_approaches.md](pipeline_approaches.md).
+**Position:** SDP-native scope. This feature is born entirely in the SDP lane (the `silver_gold_sdp` pipeline). It has no notebook-lane counterpart and sits outside the dual-approach parity exit criteria, which cover the original 19 datasets.
 
-This feature models how a high-voltage transmission grid's safe current capacity (ampacity) responds to real and simulated weather, and quantifies the financial and structural consequences. It produces two gold semantic outputs:
+## 1. Scope and reading order
 
-* **Daily operational efficiency** (`gold_sdp.fct_dlr_operational_efficiency_daily`): real historical performance, 2010 to 2026, comparing rigid static line ratings (SLR) against weather-aware dynamic line ratings (DLR).
-* **Annual climate stress horizon** (`gold_sdp.fct_dlr_climate_stress_horizon_annual`): predictive CAPEX planning out to 2040 under three controlled warming scenarios, scored with the UN climate risk equation.
+This document is the methodology appendix for the DLR feature: the physics, the locked parameter values, the dataset logic, the validation expectations and the limitations. It explains why each number is what it is, and deliberately does not repeat what the other root documents cover:
 
-A single lightweight synthetic silver component (`micro_climate_synthetic_vectors`) supplies the weather physics (wind, solar) that no public dataset provides at daily grain. Everything else builds on the project's real ingestion layers.
+* Project summary and headline results: [README.md](README.md)
+* Pipeline wiring, deployment and verification: [pipeline_approaches.md](pipeline_approaches.md), section The DLR Feature Pipeline (SDP-Native)
+
+In one sentence: the feature models how a high-voltage grid's safe current capacity (ampacity) responds to real and simulated weather, and quantifies the financial and structural consequences. It produces two gold outputs: a daily operational efficiency fact (real history, 2010 to 2026, static ratings against weather-aware dynamic ratings) and an annual climate stress horizon to 2040 under three controlled warming scenarios, scored with the UN climate risk equation. A single lightweight synthetic silver component (`micro_climate_synthetic_vectors`) supplies the weather physics (wind, solar) that no public dataset provides at daily grain; everything else builds on the project's real ingestion layers.
 
 ## 2. Physics foundation: IEEE 738 steady-state heat balance
 
@@ -93,12 +95,12 @@ $$R = E \times S = \min(1.0, D_{ratio} \times A_{ratio}) \times \exp(-0.4 \times
 
 * **D_ratio** = carbon density of the country-year ÷ that country's historical maximum carbon density (2010–2025). **A_ratio** = forest area ÷ the country's 2010 forest area (fragmentation penalty: forest edges dry faster than interior canopy).
 * **Z** = annual mean of **positive** daily temperature anomalies (in **°C**) from `weather_historical_anomaly_daily`; cool or normal days contribute 0. The exponential models fuel-bed drying — moisture loss accelerates with sustained excess heat.
-* **Grounding.** The health baseline follows Forzieri et al. 2022 (*Nature*, resilience of European forests): carbon density judged against the country's **own** historical maximum, so a sparse dry-climate forest is not penalized against a rainforest. The stress multiplier follows the climate-relative logic of EFFIS / the Canadian Fire Weather Index: anomaly against the country's **own** rolling normals replaces the broken fixed-30°C heat-day count, which merely measured how tropical a country is (Singapore: 299 "extreme" days in 2025 against a 27.4°C annual mean).
-* **Units — deliberate choice.** Z is in °C, not standard deviations. Fuel drying is driven by physical excess heat, not statistical rarity; WMO/IPCC express heat anomalies in °C against rolling normals. Sigma-normalization would additionally discount Germany's high natural variability (heat years shrink to roughly 1.2–1.6 sigma), pushing scores to ~0.55 so nothing ever crosses 0.4 — the overlay would be dead. The calibration is exp(−0.4 × 2.3) = 0.40: a perfectly healthy forest under 2.3°C of mean positive anomaly sits exactly at the trigger.
+* **Grounding.** The health baseline follows Forzieri et al. 2022 (*Nature*, resilience of European forests): carbon density judged against the country's **own** historical maximum, so a sparse dry-climate forest is not penalised against a rainforest. The stress multiplier follows the climate-relative logic of EFFIS / the Canadian Fire Weather Index: anomaly against the country's **own** rolling normals replaces the broken fixed-30°C heat-day count, which merely measured how tropical a country is (Singapore: 299 "extreme" days in 2025 against a 27.4°C annual mean).
+* **Units (a deliberate choice).** Z is in °C, not standard deviations. Fuel drying is driven by physical excess heat, not statistical rarity; WMO/IPCC express heat anomalies in °C against rolling normals. Sigma-normalization would additionally discount Germany's high natural variability (heat years shrink to roughly 1.2–1.6 sigma), pushing scores to ~0.55 so nothing ever crosses 0.4 — the overlay would be dead. The calibration is exp(−0.4 × 2.3) = 0.40: a perfectly healthy forest under 2.3°C of mean positive anomaly sits exactly at the trigger.
 * **Clamp.** E is clamped to 1.0 (Germany's forest area grew slightly above its 2010 baseline, so the raw ratio exceeds 1).
 * **Hold-last-known.** FAOSTAT ends 2025; the daily fact's 2026 dates use the 2025 score.
 
-**Dry-run evidence (live data, 2010–2025):** Germany R 0.363–0.637 — below 0.4 in 2011 (E 0.952, S 0.381, Z 2.41°C, coinciding with 70 heatwave days); Belgium R 0.400–0.625 — 2011 at R 0.400 with 63 days; Singapore R 0.679–0.829 — never below 0.4, **by design**: tropical weather is stable relative to its own norms (Z ≈ 0.35°C gives only a ~13% stress penalty) while its real deforestation (17.7k → 15.8k ha) already shows in the area term. Total overlay-critical days in the historical window: 133, all in 2011.
+**Dry-run evidence (live data, 2010–2025):** Germany R 0.363–0.637, below 0.4 in 2011 (E 0.952, S 0.381, Z 2.41°C, coinciding with 70 heatwave days); Belgium R 0.400–0.625, with 2011 at R 0.400 and 63 days; Singapore R 0.679–0.829, never below 0.4, **by design**: tropical weather is stable relative to its own norms (Z ≈ 0.35°C gives only a ~13% stress penalty) while its real deforestation (17.7k → 15.8k ha) already shows in the area term. Total overlay-critical days in the historical window: 133, all in 2011.
 
 ## 5. Dataset specifications
 
@@ -127,7 +129,7 @@ $$R = E \times S = \min(1.0, D_{ratio} \times A_{ratio}) \times \exp(-0.4 \times
 ### 5.4 `gold_sdp.fct_dlr_operational_efficiency_daily` (materialized view)
 
 * **Grain:** country-day. **Primary key:** (country, date). **Window:** 2010-01-01 to 2026-09-20 (real Open-Meteo coverage).
-* `temperature`: real daily **maximum** from `weather_historical` — the ambient the rating physics reads. A companion `temperature_mean_c` column carries the daily mean for anomaly and heatwave traceability.
+* `temperature`: real daily **maximum** from `weather_historical`, the ambient the rating physics reads. A companion `temperature_mean_c` column carries the daily mean for anomaly and heatwave traceability.
 * `heatwave_flag`: recomputed custom rule (rolling 10-year monthly mean, >5.0°C anomaly). `fct_energy_demand_daily` is a cross-validation reference only (it stops at 2025-12-31 because of its OWID inner join); see section 9.
 * `noaa_model_is_trusted`: live daily flag where NOAA observations exist (2023-01-01 to 2025-08-24: absolute error ≤ 2.0°C). After NOAA's permanent stop: Method B country constant (section 7).
 * `static_line_rating_amps`: per-country base rating − 15 A per °C of daily-max ambient above 35°C.
@@ -195,24 +197,20 @@ What happens to the rest of 2025 and 2026: they are real rows in the daily fact,
 * One NOAA station per country; station-level variance cannot be observed.
 * OWID generation stops at 2025 (partial); Exposure is held flat thereafter.
 * FAOSTAT resilience is hold-last-known for future years.
-* **Rolling-baseline warm start:** the 10-year rolling monthly baseline contains almost only 2010 data when evaluating 2011, inflating early anomalies (Germany 2011: Z = 2.41°C, 70 heatwave days). This is inherent to the custom anomaly rule — it affects heatwave flags equally, not only the resilience score — and is documented rather than patched. Early-window heatwave flags may therefore diverge from the OWID-parity reference in 2011.
-* **Wildfire overlay scope (documented boundary):** the overlay flags days where an **acute anomalous heat event coincides with a chronically degraded forest** (score < 0.4). It is an anomaly-driven forest-fragility proxy for grid-corridor risk — **not a wildfire-ignition or fire-causation model**. Real fire-danger systems (FWI / EFFIS) additionally use drought, precipitation, humidity, fuel moisture, ignition sources and wind-driven spread; none of these exist in the lakehouse. The dependency is strictly one-way: `heatwave_flag` is computed purely from weather (rolling-baseline anomaly on the daily mean) and never touches forest data; only the overlay combines the two. Singapore's zero critical days reflect absence of anomalous heat plus a stable forest baseline — not an absence of hot weather.
+* **Rolling-baseline warm start:** the 10-year rolling monthly baseline contains almost only 2010 data when evaluating 2011, inflating early anomalies (Germany 2011: Z = 2.41°C, 70 heatwave days). This is inherent to the custom anomaly rule (it affects heatwave flags equally, not only the resilience score) and is documented rather than patched. Early-window heatwave flags may therefore diverge from the OWID-parity reference in 2011.
+* **Wildfire overlay scope (documented boundary):** the overlay flags days where an **acute anomalous heat event coincides with a chronically degraded forest** (score < 0.4). It is an anomaly-driven forest-fragility proxy for grid-corridor risk, **not a wildfire-ignition or fire-causation model**. Real fire-danger systems (FWI / EFFIS) additionally use drought, precipitation, humidity, fuel moisture, ignition sources and wind-driven spread; none of these exist in the lakehouse. The dependency is strictly one-way: `heatwave_flag` is computed purely from weather (rolling-baseline anomaly on the daily mean) and never touches forest data; only the overlay combines the two. Singapore's zero critical days reflect the absence of anomalous heat plus a stable forest baseline, not an absence of hot weather.
 * The October–December 2026 tail fills in as the watermark advances.
 
-## 11. Implementation sequence
+## 11. Implementation notes
 
-1. Two new source files, isolated from existing pipeline code: `pipelines/silver/dlr_microclimate_sdp.py` (mock vectors, trust metadata, scenarios) and `pipelines/gold/dlr_gold_sdp.py` (the two gold facts), added to the `silver_gold_sdp` pipeline as literal glob library entries in `databricks.yml`.
-2. `bundle validate --strict --target dev`.
-3. Deploy and selective refresh of the six new datasets (four silver — Step 1, done and validated; two gold — Step 2).
-4. Validation queries (section 9) and review of the three MAE constants revealed at first refresh.
-5. Monitoring via the pipeline event log.
+The wiring is documented in [pipeline_approaches.md](pipeline_approaches.md), section The DLR Feature Pipeline (SDP-Native): the two source files, the pipeline resource, deployment and refresh. Build order was silver first (four datasets, deployed and validated), then gold (two facts, validated against section 9). Monitoring runs through the pipeline event log.
 
 ## 12. Decision log
 
 | Decision | Rationale |
 | --- | --- |
 | CMIP6 dropped | The bronze CMIP6 table is sparse (1,827 rows per country-model across 2020–2040); the stress-test recycle gives a dense, continuous grid |
-| Choke threshold 5% (was 20%) | A 20% choke needs 48.3°C, unreachable on daily means; 5% at 38.3°C is an industry-recognized redispatch trigger |
+| Choke threshold 5% (was 20%) | A 20% choke needs 48.3°C, unreachable on daily means; 5% at 38.3°C is an industry-recognised redispatch trigger |
 | Per-country base ratings | Singapore's tropical construction carries less thermal headroom than northern European corridors |
 | Explicit solar term | The IEEE 738 solar heating force is now represented in the rating equation, not just documented |
 | Graded vulnerability pillar | A binary flag zeroes the horizon score for trusted countries; the graded coefficient keeps risk curves continuous |
@@ -220,6 +218,6 @@ What happens to the rest of 2025 and 2026: they are real rows in the daily fact,
 | Scenario boundary at 2027 | Synthetic weather must never duplicate observed years; real data runs to September 2026 |
 | FAOSTAT as daily overlay only | Forest change is slow-moving and annual; it acts as a static baseline multiplier in the wildfire overlay |
 | Rating ambient = daily maximum (10 Nov 2026) | Daily means never cross 35°C in any target country (maxima 28.7–30.7°C): static throttling and choke days would be permanently zero on means; sag risk peaks at the hottest hour |
-| Resilience score: Forzieri baseline × EFFIS-style stress (10 Nov 2026) | No resilience column exists in any table; the composite is derived from FAOSTAT raw fields, self-referencing (density vs own historical max, area vs 2010) and climate-relative (anomaly vs own normals) — fixing the fixed-30°C tropical bias (Singapore: 299 "extreme" days at a 27.4°C mean) |
-| Stress multiplier in °C, not sigma (10 Nov 2026) | Fuel drying responds to physical excess heat (WMO/IPCC anomaly convention); sigma-normalization would discount Germany's natural variability (~1.2–1.6σ) and leave the 0.4 trigger unreachable on live data |
+| Resilience score: Forzieri baseline × EFFIS-style stress (10 Nov 2026) | No resilience column exists in any table; the composite is derived from FAOSTAT raw fields, self-referencing (density vs own historical max, area vs 2010) and climate-relative (anomaly vs own normals), fixing the fixed-30°C tropical bias (Singapore: 299 "extreme" days at a 27.4°C mean) |
+| Stress multiplier in °C, not sigma (10 Nov 2026) | Fuel drying responds to physical excess heat (WMO/IPCC anomaly convention); sigma normalisation would discount Germany's natural variability (~1.2–1.6σ) and leave the 0.4 trigger unreachable on live data |
 | E clamped at 1.0 (10 Nov 2026) | Germany's forest area grew above its 2010 baseline; an unclamped ratio > 1 would let R exceed the stress multiplier and break the [0,1] interpretation |
